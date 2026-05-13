@@ -1,0 +1,37 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<section class="filters">
+  <form method="get" action="/">
+    <label>Agent
+      <select name="agent" onchange="this.form.submit()">
+        <option value="">All agents</option>
+        <option value="claude" {{if eq .AgentFilter "claude"}}selected{{end}}>Claude</option>
+        <option value="codex"  {{if eq .AgentFilter "codex"}}selected{{end}}>Codex</option>
+      </select>
+    </label>
+    <label>Project
+      <select name="project" onchange="this.form.submit()">
+        <option value="">All projects</option>
+        {{range .Projects}}
+        <option value="{{.}}" {{if eq . $.ProjectFilter}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </label>
+  </form>
+</section>
+<table class="session-list">
+  <thead>
+    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Modified</th></tr>
+  </thead>
+  <tbody>
+    {{range .Sessions}}
+    <tr>
+      <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
+      <td class="project">{{.Project}}</td>
+      <td><a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></td>
+      <td class="mtime">{{.Modified.Format "2006-01-02 15:04"}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

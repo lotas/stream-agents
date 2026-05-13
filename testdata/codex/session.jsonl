@@ -1,0 +1,5 @@
+{"timestamp":"2026-05-01T10:00:00.000Z","type":"session_meta","payload":{"id":"codex-0000-0000-0000-000000000001","timestamp":"2026-05-01T10:00:00.000Z","cwd":"/Users/test/myproject","originator":"codex_cli_rs","cli_version":"1.0.0","source":"cli","model_provider":"openai"}}
+{"timestamp":"2026-05-01T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"review the latest commit","images":[],"local_images":[],"text_elements":[]}}
+{"timestamp":"2026-05-01T10:00:05.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Sure, let me check the latest commit for you."}}
+{"timestamp":"2026-05-01T10:00:06.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"git log -1 --oneline\"}","call_id":"call_abc123"}}
+{"timestamp":"2026-05-01T10:00:07.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_abc123","output":"abc1234 feat: add new endpoint"}}

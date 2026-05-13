@@ -1,0 +1,41 @@
+*, *::before, *::after { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; color: #1a1a1a; }
+header { background: #1a1a1a; color: #fff; padding: 0.75rem 1.5rem; }
+header a.brand { color: #fff; text-decoration: none; font-weight: 600; font-size: 1.1rem; }
+main { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+
+.filters form { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.filters label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+.filters select { padding: 0.35rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+
+.session-list { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.session-list th { background: #f0f0f0; text-align: left; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+.session-list td { padding: 0.55rem 0.8rem; border-top: 1px solid #eee; font-size: 0.9rem; vertical-align: top; }
+.session-list a { color: #0066cc; text-decoration: none; }
+.session-list a:hover { text-decoration: underline; }
+.mtime { color: #666; white-space: nowrap; }
+.project { font-size: 0.8rem; color: #555; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.badge-claude { background: #e0e7ff; color: #3730a3; }
+.badge-codex  { background: #dcfce7; color: #166534; }
+
+.session-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.session-header a { color: #0066cc; text-decoration: none; font-size: 0.9rem; }
+.transcript { display: flex; flex-direction: column; gap: 0.75rem; }
+.msg { background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.07); overflow: hidden; }
+.msg-role { padding: 0.3rem 0.8rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: #f0f0f0; }
+.msg-user   .msg-role { background: #e0e7ff; color: #3730a3; }
+.msg-assistant .msg-role { background: #fef3c7; color: #92400e; }
+.msg-body { padding: 0.75rem 1rem; line-height: 1.6; }
+.msg-body p:first-child { margin-top: 0; }
+.msg-body p:last-child { margin-bottom: 0; }
+.msg-body pre { background: #1e1e1e; color: #d4d4d4; padding: 0.75rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; position: relative; }
+.msg-body code { font-family: "Fira Code", "Cascadia Code", monospace; }
+
+.copy-btn { position: absolute; top: 0.4rem; right: 0.4rem; background: #444; color: #fff; border: none; border-radius: 3px; padding: 0.2rem 0.5rem; font-size: 0.75rem; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+pre:hover .copy-btn { opacity: 1; }
+
+.tool-block { padding: 0.4rem 0.8rem; }
+.tool-block summary { cursor: pointer; font-size: 0.85rem; color: #555; user-select: none; }
+.tool-block pre { font-size: 0.8rem; margin: 0.4rem 0 0; white-space: pre-wrap; word-break: break-all; }

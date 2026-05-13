@@ -1,0 +1,34 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<div class="session-header">
+  <a href="/">← All sessions</a>
+  <span class="badge badge-{{.Session.Agent}}">{{.Session.Agent}}</span>
+  <span class="project">{{.Session.Project}}</span>
+  <span class="mtime">{{.Session.Modified.Format "2006-01-02 15:04"}}</span>
+</div>
+<div class="transcript">
+  {{range .Messages}}
+  <div class="msg msg-{{.Role}}">
+    <div class="msg-role">{{.Role}}</div>
+    {{if eq .Role "tool_call"}}
+    <details class="tool-block">
+      <summary>🔧 {{index .Meta "name"}}</summary>
+      <pre>{{index .Meta "input"}}</pre>
+    </details>
+    {{else if eq .Role "tool_result"}}
+    <details class="tool-block">
+      <summary>📤 tool result{{if index .Meta "is_error"}} (error){{end}}</summary>
+      <pre>{{.Text}}</pre>
+    </details>
+    {{else if eq .Role "system"}}
+    <details class="tool-block">
+      <summary>⚙ system</summary>
+      <div class="msg-body">{{.Text}}</div>
+    </details>
+    {{else}}
+    <div class="msg-body">{{.RenderedText}}</div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
