@@ -3,37 +3,71 @@
 <div class="session-header">
   <a href="/">← All sessions</a>
   <span class="badge badge-{{.Session.Agent}}">{{.Session.Agent}}</span>
-  <span class="project">{{.Session.Project}}</span>
+  <span class="project">{{shortPath .Session.Project}}</span>
   <span class="mtime">{{.Session.Modified.Format "2006-01-02 15:04"}}</span>
 </div>
-<div class="transcript">
-  {{range .Messages}}
-  <div class="msg msg-{{.Role}}">
-    <div class="msg-role">{{.Role}}</div>
-    {{if eq .Role "tool_call"}}
-    <details class="tool-block">
-      <summary>🔧 {{index .Meta "name"}}</summary>
-      <pre>{{index .Meta "input"}}</pre>
-    </details>
-    {{else if eq .Role "tool_result"}}
-    <details class="tool-block">
-      <summary>📤 tool result{{if index .Meta "is_error"}} (error){{end}}</summary>
-      <pre>{{.Text}}</pre>
-    </details>
-    {{else if eq .Role "system"}}
-    <details class="tool-block">
-      <summary>⚙ system</summary>
-      <div class="msg-body">{{.Text}}</div>
-    </details>
-    {{else if .Collapsible}}
-    <details class="tool-block">
-      <summary>{{.CollapseSummary}}</summary>
-      <div class="msg-body">{{.RenderedText}}</div>
+
+<div class="toolbar" role="toolbar" aria-label="Filter transcript">
+  <button class="chip" data-filter="user" aria-pressed="true">User</button>
+  <button class="chip" data-filter="assistant" aria-pressed="true">Assistant</button>
+  {{if .ToolNames}}
+  <details class="chip-dropdown">
+    <summary class="chip" data-filter="tools" aria-pressed="true">Tools ▾</summary>
+    <div class="tool-filter-menu">
+      {{range .ToolNames}}
+      <div class="tool-filter-row">
+        <label><input type="checkbox" data-tool="{{.Name}}" checked> {{.Name}} <span class="tool-count">({{.Count}})</span></label>
+        <button class="tool-only" data-tool="{{.Name}}">only</button>
+      </div>
+      {{end}}
+    </div>
+  </details>
+  <button class="chip" id="collapse-all">Collapse tools</button>
+  {{end}}
+  <a class="chip chip-link" href="#top">↑ Top</a>
+</div>
+
+<div class="page-grid">
+  <div class="transcript" id="top">
+    {{range .Items}}
+    {{if eq .Kind "tool"}}
+    <details class="tool-pair{{if .Tool.IsError}} is-error{{end}}{{if .Tool.Pending}} is-pending{{end}}" data-tool="{{.Tool.Name}}" id="{{.Tool.AnchorID}}">
+      <summary>
+        <span class="tp-name">{{if .Tool.Name}}{{.Tool.Name}}{{else}}result{{end}}</span>{{if .Tool.Index}}<span class="tp-index">#{{.Tool.Index}}</span>{{end}}<span class="tp-preview">{{.Tool.InputPreview}}</span><span class="tp-status">{{if .Tool.IsError}}✗{{else if .Tool.Pending}}…{{else}}✓{{end}}</span>
+      </summary>
+      <div class="tp-body">
+        {{if .Tool.InputJSON}}<section class="tp-section"><h6>args</h6><pre>{{.Tool.InputJSON}}</pre></section>{{end}}
+        {{if .Tool.Output}}<section class="tp-section"><h6>output</h6>{{if .Tool.OutputPre}}<pre>{{.Tool.Output}}</pre>{{else}}<div class="tp-output">{{.Tool.Output}}</div>{{end}}</section>{{end}}
+      </div>
     </details>
     {{else}}
-    <div class="msg-body">{{.RenderedText}}</div>
+    <div class="msg msg-{{.Role}}"{{if .TurnID}} id="{{.TurnID}}"{{end}}>
+      <div class="msg-role">{{.Role}}</div>
+      {{if eq .Role "system"}}
+      <details class="tool-block">
+        <summary>⚙ system</summary>
+        <div class="msg-body">{{.Body}}</div>
+      </details>
+      {{else if .Collapsible}}
+      <details class="tool-block">
+        <summary>{{.CollapseSummary}}</summary>
+        <div class="msg-body">{{.Body}}</div>
+      </details>
+      {{else}}
+      <div class="msg-body">{{.Body}}</div>
+      {{end}}
+    </div>
+    {{end}}
     {{end}}
   </div>
+
+  {{if .Turns}}
+  <aside class="toc" aria-label="Turns">
+    <h6 class="toc-heading">Turns</h6>
+    <ol class="toc-list">
+      {{range .Turns}}<li><a href="#{{.AnchorID}}">{{.Index}}. {{.Title}}</a></li>{{end}}
+    </ol>
+  </aside>
   {{end}}
 </div>
 {{end}}
