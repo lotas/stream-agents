@@ -16,7 +16,7 @@ func TestBuildViewItems_ClaudeFusion(t *testing.T) {
 		msg("tool_call", "Bash", map[string]any{"name": "Bash", "id": "abc", "input": `{"command":"ls"}`}),
 		msg("tool_result", "file1\nfile2", map[string]any{"tool_use_id": "abc"}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if len(items) != 1 {
 		t.Fatalf("want 1 fused item, got %d", len(items))
 	}
@@ -37,7 +37,7 @@ func TestBuildViewItems_CodexFusion(t *testing.T) {
 		msg("tool_call", "exec", map[string]any{"name": "exec", "call_id": "x1", "input": `{"command":"echo hi"}`}),
 		msg("tool_result", "hi", map[string]any{"call_id": "x1"}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if len(items) != 1 {
 		t.Fatalf("want 1 fused item, got %d", len(items))
 	}
@@ -50,7 +50,7 @@ func TestBuildViewItems_OrphanCall(t *testing.T) {
 	msgs := []store.Message{
 		msg("tool_call", "Read", map[string]any{"name": "Read", "id": "no-result", "input": `{"file_path":"/tmp/x"}`}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
@@ -63,7 +63,7 @@ func TestBuildViewItems_OrphanResult(t *testing.T) {
 	msgs := []store.Message{
 		msg("tool_result", "some output", map[string]any{"tool_use_id": "ghost"}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if len(items) != 1 {
 		t.Fatalf("want 1 orphan item, got %d", len(items))
 	}
@@ -85,7 +85,7 @@ func TestBuildViewItems_PerNameIndex(t *testing.T) {
 		msg("tool_call", "Bash", map[string]any{"name": "Bash", "id": "b3", "input": `{}`}),
 		msg("tool_result", "r3", map[string]any{"tool_use_id": "b3"}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if len(items) != 3 {
 		t.Fatalf("want 3 items, got %d", len(items))
 	}
@@ -102,7 +102,7 @@ func TestBuildViewItems_TurnAnchors(t *testing.T) {
 		msg("assistant", "answer", nil),
 		msg("user", "second question", nil),
 	}
-	items, turns, _ := buildViewItems(msgs)
+	items, turns, _, _ := buildViewItems(msgs)
 	if len(turns) != 2 {
 		t.Fatalf("want 2 turns, got %d", len(turns))
 	}
@@ -123,7 +123,7 @@ func TestBuildViewItems_ErrorResult(t *testing.T) {
 		msg("tool_call", "Bash", map[string]any{"name": "Bash", "id": "e1", "input": `{}`}),
 		msg("tool_result", "permission denied", map[string]any{"tool_use_id": "e1", "is_error": true}),
 	}
-	items, _, _ := buildViewItems(msgs)
+	items, _, _, _ := buildViewItems(msgs)
 	if !items[0].Tool.IsError {
 		t.Error("expected IsError=true")
 	}

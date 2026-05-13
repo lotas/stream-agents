@@ -132,6 +132,31 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
 }
+.session-stats {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.stat-label {
+  font-size: 0.72rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.stat-val {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #444;
+  font-variant-numeric: tabular-nums;
+}
+
 .toc-heading {
   margin: 0 0 0.4rem;
   font-size: 0.72rem;
@@ -160,9 +185,10 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 /* ── Transcript ───────────────────────────────────────────────────────────── */
 .transcript { display: flex; flex-direction: column; gap: 0.5rem; }
 .msg { background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.07); overflow: hidden; }
-.msg-role { padding: 0.3rem 0.8rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: #f0f0f0; }
+.msg-role { display: flex; align-items: center; padding: 0.3rem 0.8rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: #f0f0f0; }
 .msg-user   .msg-role { background: #e0e7ff; color: #3730a3; }
 .msg-assistant .msg-role { background: #fef3c7; color: #92400e; }
+.msg-time { margin-left: auto; font-size: 0.68rem; font-weight: 400; opacity: 0.55; letter-spacing: 0; text-transform: none; }
 .msg-body { padding: 0.75rem 1rem; line-height: 1.6; }
 .msg-body p:first-child { margin-top: 0; }
 .msg-body p:last-child { margin-bottom: 0; }
@@ -219,11 +245,25 @@ pre:hover .copy-btn { opacity: 1; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.tp-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.tp-exec {
+  font-size: 0.7rem;
+  color: #aaa;
+}
 .tp-status {
   font-size: 0.75rem;
-  flex-shrink: 0;
-  margin-left: auto;
-  color: #22c55e; /* green checkmark */
+  color: #22c55e;
+}
+.tp-status.is-err { color: #ef4444; }
+.tp-time {
+  font-size: 0.68rem;
+  color: #bbb;
 }
 
 .tool-pair.is-error { border-left: 3px solid #ef4444; }

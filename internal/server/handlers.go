@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"stream-agents/internal/render"
 	"stream-agents/internal/store"
@@ -24,7 +25,10 @@ func shortPath(path string) string {
 	return path
 }
 
-var funcMap = template.FuncMap{"shortPath": shortPath}
+var funcMap = template.FuncMap{
+	"shortPath":  shortPath,
+	"fmtTokens": fmtTokens,
+}
 
 var (
 	listTmpl    = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/list.html"))
@@ -82,6 +86,9 @@ type toolPair struct {
 	IsError   bool
 	Pending   bool   // no matching result seen yet
 	AnchorID  string
+	TimeLabel string // elapsed from session start, e.g. "+1m 23s"
+	ExecLabel string // tool execution duration, e.g. "0.3s"
+	callTime  time.Time
 }
 
 // viewItem is one renderable unit in the session transcript.
@@ -92,6 +99,7 @@ type viewItem struct {
 	TurnID          string        // anchor id set on user-turn messages for the TOC
 	Collapsible     bool          // skill payload user messages
 	CollapseSummary string
+	TimeLabel       string    // elapsed from session start, e.g. "+1m 23s"
 	Tool            *toolPair // non-nil when Kind=="tool"
 }
 
@@ -181,21 +189,91 @@ func truncate(s string, max int) string {
 	return s
 }
 
+type sessionStats struct {
+	Duration        string // e.g. "23m 45s"
+	InputTokens     int
+	OutputTokens    int
+	CacheReadTokens int
+	HasTokens       bool
+}
+
 type sessionData struct {
 	PageTitle string
 	Session   store.Session
 	Items     []viewItem
 	Turns     []turn
 	ToolNames []toolNameCount
+	Stats     sessionStats
+}
+
+func formatElapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("+%ds", s)
+	}
+	m := s / 60
+	s = s % 60
+	if m < 60 {
+		return fmt.Sprintf("+%dm %ds", m, s)
+	}
+	return fmt.Sprintf("+%dh %dm", m/60, m%60)
+}
+
+func formatDuration(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	m := s / 60
+	s = s % 60
+	if m < 60 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%dh %dm", m/60, m%60)
+}
+
+func formatExec(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+func fmtTokens(n int) string {
+	if n >= 1000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 // buildViewItems converts a flat message list into renderable view items,
 // fusing each tool_call with its matching tool_result into a single toolPair.
-func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolNames []toolNameCount) {
+func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolNames []toolNameCount, stats sessionStats) {
 	nameCounts := map[string]int{}
 	pendingByID := map[string]int{} // callID -> index in items
 	toolCountMap := map[string]int{}
 	turnIndex := 0
+
+	// Find session start time (first non-zero timestamp).
+	var startTime, lastTime time.Time
+	for _, m := range msgs {
+		if !m.Time.IsZero() {
+			if startTime.IsZero() {
+				startTime = m.Time
+			}
+			lastTime = m.Time
+		}
+	}
+	if !startTime.IsZero() && lastTime.After(startTime) {
+		stats.Duration = formatDuration(lastTime.Sub(startTime))
+	}
+
+	elapsed := func(t time.Time) string {
+		if t.IsZero() || startTime.IsZero() {
+			return ""
+		}
+		return formatElapsed(t.Sub(startTime))
+	}
 
 	for _, m := range msgs {
 		switch m.Role {
@@ -221,6 +299,8 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 				InputPreview: toolInputPreview(name, inputJSON),
 				Pending:      true,
 				AnchorID:     anchorID,
+				TimeLabel:    elapsed(m.Time),
+				callTime:     m.Time,
 			}
 			if callID != "" {
 				pendingByID[callID] = len(items)
@@ -241,6 +321,9 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 					items[idx].Tool.OutputPre = pre
 					items[idx].Tool.IsError = isError
 					items[idx].Tool.Pending = false
+					if !items[idx].Tool.callTime.IsZero() && !m.Time.IsZero() {
+						items[idx].Tool.ExecLabel = formatExec(m.Time.Sub(items[idx].Tool.callTime))
+					}
 					delete(pendingByID, resultID)
 					continue
 				}
@@ -249,11 +332,11 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 			out, pre := renderToolOutput(m.Text)
 			items = append(items, viewItem{
 				Kind: "tool",
-				Tool: &toolPair{Output: out, OutputPre: pre, IsError: isError},
+				Tool: &toolPair{Output: out, OutputPre: pre, IsError: isError, TimeLabel: elapsed(m.Time)},
 			})
 
 		case "user":
-			vi := viewItem{Kind: "text", Role: "user", Body: render.RenderMarkdown(m.Text)}
+			vi := viewItem{Kind: "text", Role: "user", Body: render.RenderMarkdown(m.Text), TimeLabel: elapsed(m.Time)}
 			if summary := skillSummary(m.Text); summary != "" {
 				vi.Collapsible = true
 				vi.CollapseSummary = summary
@@ -270,11 +353,19 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 			items = append(items, vi)
 
 		case "assistant":
-			items = append(items, viewItem{
-				Kind: "text",
-				Role: "assistant",
-				Body: render.RenderMarkdown(m.Text),
-			})
+			vi := viewItem{
+				Kind:      "text",
+				Role:      "assistant",
+				Body:      render.RenderMarkdown(m.Text),
+				TimeLabel: elapsed(m.Time),
+			}
+			if m.Usage != nil {
+				stats.InputTokens += m.Usage.InputTokens
+				stats.OutputTokens += m.Usage.OutputTokens
+				stats.CacheReadTokens += m.Usage.CacheReadTokens
+				stats.HasTokens = true
+			}
+			items = append(items, vi)
 
 		case "system":
 			items = append(items, viewItem{
@@ -350,7 +441,7 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, turns, toolNames := buildViewItems(msgs)
+	items, turns, toolNames, stats := buildViewItems(msgs)
 
 	title := sess.Title
 	if title == "" {
@@ -362,6 +453,7 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		Items:     items,
 		Turns:     turns,
 		ToolNames: toolNames,
+		Stats:     stats,
 	}
 	if err := sessionTmpl.ExecuteTemplate(w, "session.html", data); err != nil {
 		http.Error(w, err.Error(), 500)

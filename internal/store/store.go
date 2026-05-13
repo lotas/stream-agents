@@ -15,11 +15,19 @@ type Session struct {
 	MessageCount int
 }
 
+type TokenUsage struct {
+	InputTokens         int
+	OutputTokens        int
+	CacheCreationTokens int
+	CacheReadTokens     int
+}
+
 type Message struct {
-	Role string
-	Text string
-	Meta map[string]any
-	Time time.Time
+	Role  string
+	Text  string
+	Meta  map[string]any
+	Time  time.Time
+	Usage *TokenUsage // non-nil on assistant messages that carry usage data
 }
 
 type Store interface {

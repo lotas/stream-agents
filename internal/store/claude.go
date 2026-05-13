@@ -278,6 +278,12 @@ func claudeParseAssistantMsg(raw map[string]json.RawMessage, ts time.Time) []Mes
 	}
 	var msg struct {
 		Content []json.RawMessage `json:"content"`
+		Usage   *struct {
+			InputTokens         int `json:"input_tokens"`
+			OutputTokens        int `json:"output_tokens"`
+			CacheCreationTokens int `json:"cache_creation_input_tokens"`
+			CacheReadTokens     int `json:"cache_read_input_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(msgRaw, &msg); err != nil {
 		return nil
@@ -308,6 +314,23 @@ func claudeParseAssistantMsg(raw map[string]json.RawMessage, ts time.Time) []Mes
 			meta := map[string]any{"name": block.Name, "id": block.ID, "input": inputStr}
 			out = append(out, Message{Role: "tool_call", Text: block.Name, Meta: meta, Time: ts})
 		}
+	}
+	// Attach token usage to the first message of this turn.
+	if msg.Usage != nil && len(out) > 0 {
+		u := &TokenUsage{
+			InputTokens:         msg.Usage.InputTokens,
+			OutputTokens:        msg.Usage.OutputTokens,
+			CacheCreationTokens: msg.Usage.CacheCreationTokens,
+			CacheReadTokens:     msg.Usage.CacheReadTokens,
+		}
+		idx := 0
+		for i := range out {
+			if out[i].Role == "assistant" {
+				idx = i
+				break
+			}
+		}
+		out[idx].Usage = u
 	}
 	return out
 }
