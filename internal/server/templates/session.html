@@ -25,6 +25,11 @@
       <summary>⚙ system</summary>
       <div class="msg-body">{{.Text}}</div>
     </details>
+    {{else if .Collapsible}}
+    <details class="tool-block">
+      <summary>{{.CollapseSummary}}</summary>
+      <div class="msg-body">{{.RenderedText}}</div>
+    </details>
     {{else}}
     <div class="msg-body">{{.RenderedText}}</div>
     {{end}}

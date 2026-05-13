@@ -3,6 +3,7 @@ package server
 import (
 	"html/template"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,9 +11,20 @@ import (
 	"stream-agents/internal/store"
 )
 
+var homeDir, _ = os.UserHomeDir()
+
+func shortPath(path string) string {
+	if homeDir != "" && strings.HasPrefix(path, homeDir+"/") {
+		return "~/" + path[len(homeDir)+1:]
+	}
+	return path
+}
+
+var funcMap = template.FuncMap{"shortPath": shortPath}
+
 var (
-	listTmpl    = template.Must(template.New("").ParseFS(tmplFS, "templates/layout.html", "templates/list.html"))
-	sessionTmpl = template.Must(template.New("").ParseFS(tmplFS, "templates/layout.html", "templates/session.html"))
+	listTmpl    = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/list.html"))
+	sessionTmpl = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/session.html"))
 )
 
 type handlers struct {
@@ -57,7 +69,23 @@ func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
 
 type renderedMessage struct {
 	store.Message
-	RenderedText template.HTML
+	RenderedText    template.HTML
+	Collapsible     bool
+	CollapseSummary string
+}
+
+// skillSummary returns a non-empty summary if text looks like a loaded skill payload.
+// Claude injects skill content as user messages starting with "Base directory for this skill:".
+func skillSummary(text string) string {
+	const prefix = "Base directory for this skill:"
+	if !strings.HasPrefix(text, prefix) {
+		return ""
+	}
+	// First line is "Base directory for this skill: /some/path/skill-name"
+	line := strings.SplitN(text, "\n", 2)[0]
+	path := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	name := filepath.Base(path)
+	return "📦 skill: " + name
 }
 
 type sessionData struct {
@@ -119,6 +147,10 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		rm := renderedMessage{Message: m}
 		if m.Role == "user" || m.Role == "assistant" {
 			rm.RenderedText = render.RenderMarkdown(m.Text)
+			if summary := skillSummary(m.Text); summary != "" {
+				rm.Collapsible = true
+				rm.CollapseSummary = summary
+			}
 		}
 		rendered[i] = rm
 	}

@@ -2,19 +2,24 @@
 body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; color: #1a1a1a; }
 header { background: #1a1a1a; color: #fff; padding: 0.75rem 1.5rem; }
 header a.brand { color: #fff; text-decoration: none; font-weight: 600; font-size: 1.1rem; }
-main { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 
 .filters form { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .filters label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
 .filters select { padding: 0.35rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
 
-.session-list { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.table-wrap { overflow-x: auto; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.session-list { width: 100%; border-collapse: collapse; background: #fff; table-layout: fixed; }
+.session-list col.col-agent   { width: 90px; }
+.session-list col.col-project { width: 22%; }
+.session-list col.col-title   { /* fills remaining space */ }
+.session-list col.col-mtime   { width: 120px; }
 .session-list th { background: #f0f0f0; text-align: left; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
-.session-list td { padding: 0.55rem 0.8rem; border-top: 1px solid #eee; font-size: 0.9rem; vertical-align: top; }
-.session-list a { color: #0066cc; text-decoration: none; }
+.session-list td { padding: 0.55rem 0.8rem; border-top: 1px solid #eee; font-size: 0.9rem; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-list a { color: #0066cc; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list a:hover { text-decoration: underline; }
-.mtime { color: #666; white-space: nowrap; }
-.project { font-size: 0.8rem; color: #555; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mtime { color: #666; }
+.project { font-size: 0.8rem; color: #555; }
 
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
 .badge-claude { background: #e0e7ff; color: #3730a3; }
