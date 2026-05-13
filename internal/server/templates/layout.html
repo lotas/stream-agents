@@ -6,7 +6,7 @@
   <title>{{if .PageTitle}}{{.PageTitle}}{{else}}stream-agents{{end}}</title>
   <link rel="stylesheet" href="/assets/main.css">
 </head>
-<body>
+<body{{block "bodyAttrs" .}}{{end}}>
   <header>
     <a href="/" class="brand">stream-agents</a>
   </header>
@@ -14,5 +14,6 @@
     {{block "content" .}}{{end}}
   </main>
   <script src="/assets/main.js"></script>
+  <div id="notify-root" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>

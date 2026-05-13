@@ -547,6 +547,87 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *handlers) handleNotify(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", 500)
+		return
+	}
+
+	type trackedFile struct {
+		sess store.Session
+		path string
+		size int64
+	}
+	tracked := map[string]trackedFile{} // key: "agent:id"
+
+	addHotSessions := func() {
+		sessions, err := h.idx.ListAll(r.Context(), "", "")
+		if err != nil {
+			return
+		}
+		for _, s := range sessions {
+			if time.Since(s.Modified) >= 10*time.Minute {
+				continue
+			}
+			key := s.Agent + ":" + s.ID
+			if _, seen := tracked[key]; seen {
+				continue
+			}
+			fpath := h.idx.FilePath(s.Agent, s.ID)
+			if fpath == "" {
+				continue
+			}
+			fi, err := os.Stat(fpath)
+			if err != nil {
+				continue
+			}
+			tracked[key] = trackedFile{sess: s, path: fpath, size: fi.Size()}
+		}
+	}
+
+	addHotSessions()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			addHotSessions()
+
+			anyChange := false
+			for key, tf := range tracked {
+				fi, err := os.Stat(tf.path)
+				if err != nil || fi.Size() <= tf.size {
+					continue
+				}
+				payload, _ := json.Marshal(map[string]string{
+					"agent":   tf.sess.Agent,
+					"id":      tf.sess.ID,
+					"title":   tf.sess.Title,
+					"project": tf.sess.Project,
+				})
+				fmt.Fprintf(w, "event: session-updated\ndata: %s\n\n", string(payload))
+				flusher.Flush()
+				tf.size = fi.Size()
+				tracked[key] = tf
+				anyChange = true
+			}
+			if !anyChange {
+				fmt.Fprintf(w, ": keepalive\n\n")
+				flusher.Flush()
+			}
+		}
+	}
+}
+
 func (h *handlers) handleStream(w http.ResponseWriter, r *http.Request) {
 	agent := r.PathValue("agent")
 	id := r.PathValue("id")
@@ -611,6 +692,8 @@ func (h *handlers) handleStream(w http.ResponseWriter, r *http.Request) {
 		return formatElapsed(t.Sub(startTime))
 	}
 
+	var accumInput, accumOutput, accumCache int
+
 	// Replay lines before startOffset to reconstruct pending tool_call state.
 	pendingByID := map[string]*toolPair{} // callID → toolPair from initial render
 	nameCounts := map[string]int{}
@@ -648,6 +731,12 @@ func (h *handlers) handleStream(w http.ResponseWriter, r *http.Request) {
 							resultID, _ = m.Meta["call_id"].(string)
 						}
 						delete(pendingByID, resultID)
+					case "assistant":
+						if m.Usage != nil {
+							accumInput += m.Usage.InputTokens
+							accumOutput += m.Usage.OutputTokens
+							accumCache += m.Usage.CacheReadTokens
+						}
 					}
 				}
 			}
@@ -763,6 +852,23 @@ func (h *handlers) handleStream(w http.ResponseWriter, r *http.Request) {
 			vi := viewItem{Kind: "text", Role: "assistant", Body: render.RenderMarkdown(m.Text), TimeLabel: elapsed(m.Time)}
 			newItems = append(newItems, vi)
 			sendSSE("append", renderItem(vi))
+
+			if m.Usage != nil {
+				accumInput += m.Usage.InputTokens
+				accumOutput += m.Usage.OutputTokens
+				accumCache += m.Usage.CacheReadTokens
+				var dur string
+				if !startTime.IsZero() {
+					dur = formatDuration(time.Since(startTime))
+				}
+				statsPayload, _ := json.Marshal(map[string]any{
+					"inputTokens":     accumInput,
+					"outputTokens":    accumOutput,
+					"cacheReadTokens": accumCache,
+					"duration":        dur,
+				})
+				sendSSE("stats", string(statsPayload))
+			}
 
 		case "system":
 			vi := viewItem{Kind: "text", Role: "system", Body: template.HTML(html.EscapeString(m.Text))}

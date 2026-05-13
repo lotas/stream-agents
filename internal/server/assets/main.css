@@ -317,3 +317,71 @@ pre:hover .copy-btn { opacity: 1; }
 /* ── Filter hide rules (driven by JS body classes) ───────────────────────── */
 body.hide-user .msg-user { display: none; }
 body.hide-assistant .msg-assistant { display: none; }
+
+/* ── Notification toasts ──────────────────────────────────────────────── */
+#notify-root {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: .5rem;
+  max-width: 320px;
+  pointer-events: none;
+}
+.notify-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: .6rem .75rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  animation: notify-in .2s ease;
+  transition: opacity .5s ease;
+}
+.notify-toast.notify-fade { opacity: 0; }
+@keyframes notify-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notify-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.notify-link:hover .notify-title { text-decoration: underline; }
+.notify-title {
+  font-size: .85rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notify-project {
+  font-size: .75rem;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notify-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  align-self: flex-start;
+}
+.notify-close:hover { color: #1a1a1a; }

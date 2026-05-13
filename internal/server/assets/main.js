@@ -173,6 +173,85 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    const fmtTok = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
+
+    es.addEventListener('stats', e => {
+      try {
+        const d = JSON.parse(e.data);
+        const dur = document.getElementById('stat-duration');
+        if (dur && d.duration) dur.textContent = d.duration;
+        const inp = document.getElementById('stat-in');
+        if (inp && d.inputTokens) inp.textContent = fmtTok(d.inputTokens);
+        const out = document.getElementById('stat-out');
+        if (out && d.outputTokens) out.textContent = fmtTok(d.outputTokens);
+        const cache = document.getElementById('stat-cache');
+        if (cache && d.cacheReadTokens) cache.textContent = fmtTok(d.cacheReadTokens);
+      } catch (_) {}
+    });
+
     es.onerror = () => es.close();
   }
+
+  // ── Global /notify subscription ──────────────────────────────────────
+  (function () {
+    const notifyRoot = document.getElementById('notify-root');
+    if (!notifyRoot) return;
+
+    function shortPathJS(p) {
+      return p.replace(/^\/(?:Users|home)\/[^/]+\//, '~/');
+    }
+
+    function showToast(data) {
+      const bodyAgent = document.body.dataset.sessionAgent;
+      const bodyId    = document.body.dataset.sessionId;
+      if (bodyAgent === data.agent && bodyId === data.id) return;
+
+      const notifyKey = data.agent + ':' + data.id;
+      const existing  = notifyRoot.querySelector('[data-notify-key="' + CSS.escape(notifyKey) + '"]');
+      if (existing) existing.remove();
+
+      const toast = document.createElement('div');
+      toast.className = 'notify-toast';
+      toast.dataset.notifyKey = notifyKey;
+
+      const link = document.createElement('a');
+      link.className = 'notify-link';
+      link.href = '/session/' + data.agent + '/' + data.id;
+
+      const titleEl = document.createElement('span');
+      titleEl.className = 'notify-title';
+      const rawTitle = data.title || data.id;
+      titleEl.textContent = rawTitle.length > 50 ? rawTitle.slice(0, 50) + '…' : rawTitle;
+      link.appendChild(titleEl);
+
+      if (data.project) {
+        const projEl = document.createElement('span');
+        projEl.className = 'notify-project';
+        projEl.textContent = shortPathJS(data.project);
+        link.appendChild(projEl);
+      }
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'notify-close';
+      closeBtn.setAttribute('aria-label', 'Dismiss');
+      closeBtn.textContent = '×';
+      toast.appendChild(link);
+      toast.appendChild(closeBtn);
+      notifyRoot.appendChild(toast);
+
+      const fadeTimer   = setTimeout(() => toast.classList.add('notify-fade'), 7500);
+      const removeTimer = setTimeout(() => toast.remove(), 8000);
+      closeBtn.addEventListener('click', () => {
+        clearTimeout(fadeTimer);
+        clearTimeout(removeTimer);
+        toast.remove();
+      });
+    }
+
+    const notifyES = new EventSource('/notify');
+    notifyES.addEventListener('session-updated', e => {
+      try { showToast(JSON.parse(e.data)); } catch (_) {}
+    });
+    notifyES.onerror = () => {};
+  })();
 });

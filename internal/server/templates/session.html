@@ -1,4 +1,5 @@
 {{template "layout.html" .}}
+{{define "bodyAttrs"}} data-session-agent="{{.Session.Agent}}" data-session-id="{{.Session.ID}}"{{end}}
 {{define "content"}}
 <div class="session-header">
   <a href="/">← All sessions</a>
@@ -33,13 +34,13 @@
   </div>
 
   <aside class="toc" aria-label="Session info">
-    {{if or .Stats.Duration .Stats.HasTokens}}
+    {{if or .Stats.Duration .Stats.HasTokens .StreamOffset}}
     <div class="session-stats">
-      {{if .Stats.Duration}}<div class="stat-row"><span class="stat-label">Duration</span><span class="stat-val">{{.Stats.Duration}}</span></div>{{end}}
-      {{if .Stats.HasTokens}}
-      <div class="stat-row"><span class="stat-label">In</span><span class="stat-val">{{fmtTokens .Stats.InputTokens}}</span></div>
-      <div class="stat-row"><span class="stat-label">Out</span><span class="stat-val">{{fmtTokens .Stats.OutputTokens}}</span></div>
-      {{if .Stats.CacheReadTokens}}<div class="stat-row"><span class="stat-label">Cache hit</span><span class="stat-val">{{fmtTokens .Stats.CacheReadTokens}}</span></div>{{end}}
+      <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-val" id="stat-duration">{{if .Stats.Duration}}{{.Stats.Duration}}{{else}}—{{end}}</span></div>
+      {{if or .Stats.HasTokens .StreamOffset}}
+      <div class="stat-row"><span class="stat-label">In</span><span class="stat-val" id="stat-in">{{if .Stats.HasTokens}}{{fmtTokens .Stats.InputTokens}}{{else}}—{{end}}</span></div>
+      <div class="stat-row"><span class="stat-label">Out</span><span class="stat-val" id="stat-out">{{if .Stats.HasTokens}}{{fmtTokens .Stats.OutputTokens}}{{else}}—{{end}}</span></div>
+      <div class="stat-row"><span class="stat-label">Cache hit</span><span class="stat-val" id="stat-cache">{{if .Stats.CacheReadTokens}}{{fmtTokens .Stats.CacheReadTokens}}{{else}}—{{end}}</span></div>
       {{end}}
     </div>
     {{end}}

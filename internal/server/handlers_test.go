@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"stream-agents/internal/server"
 	"stream-agents/internal/store"
@@ -108,5 +110,66 @@ func TestUnknownAgentReturns404(t *testing.T) {
 	resp, _ := http.Get(ts.URL + "/session/unknown/some-id")
 	if resp.StatusCode != 404 {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestHandleNotifyReturnsSSE(t *testing.T) {
+	ts := buildTestServer(t)
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/notify", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return // timeout is expected — SSE is long-lived
+		}
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("GET /notify = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+	}
+}
+
+func TestSessionPageHasDataAttrs(t *testing.T) {
+	ts := buildTestServer(t)
+	defer ts.Close()
+
+	resp, _ := http.Get(ts.URL + "/session/claude/test-0000-0000-0000-000000000001")
+	var sb strings.Builder
+	io.Copy(&sb, resp.Body)
+	resp.Body.Close()
+	body := sb.String()
+
+	if !strings.Contains(body, `data-session-agent="claude"`) {
+		t.Error("session page missing data-session-agent attribute")
+	}
+	if !strings.Contains(body, `data-session-id="test-0000-0000-0000-000000000001"`) {
+		t.Error("session page missing data-session-id attribute")
+	}
+}
+
+func TestSessionPageHasStatsIDs(t *testing.T) {
+	ts := buildTestServer(t)
+	defer ts.Close()
+
+	resp, _ := http.Get(ts.URL + "/session/claude/test-0000-0000-0000-000000000001")
+	var sb strings.Builder
+	io.Copy(&sb, resp.Body)
+	resp.Body.Close()
+	body := sb.String()
+
+	// The test file is freshly written so it is "hot"; stats IDs must be present.
+	for _, id := range []string{"stat-duration", "stat-in", "stat-out", "stat-cache"} {
+		if !strings.Contains(body, `id="`+id+`"`) {
+			t.Errorf("session page missing id=%q", id)
+		}
 	}
 }
