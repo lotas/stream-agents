@@ -277,6 +277,37 @@ type sessionData struct {
 	ToolNames    []toolNameCount
 	Stats        sessionStats
 	StreamOffset int64 // file size at render time; non-zero only for hot sessions
+	HotSessions  []hotSession
+}
+
+// hotSession is a slim entry for the Active panel.
+type hotSession struct {
+	Agent   string `json:"agent"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Project string `json:"project"`
+}
+
+const hotPanelLimit = 8
+
+// buildHotSessions filters sessions modified within the hot window, optionally
+// excluding the current session, and caps the result. Input must be sorted by
+// Modified desc.
+func buildHotSessions(sessions []store.Session, excludeAgent, excludeID string, limit int) []hotSession {
+	out := make([]hotSession, 0, limit)
+	for _, s := range sessions {
+		if time.Since(s.Modified) >= 10*time.Minute {
+			continue
+		}
+		if s.Agent == excludeAgent && s.ID == excludeID {
+			continue
+		}
+		out = append(out, hotSession{Agent: s.Agent, ID: s.ID, Title: s.Title, Project: s.Project})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func renderItem(item viewItem) string {
@@ -488,7 +519,8 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure the store index is populated before looking up the file path.
-	allSessions, err := h.idx.ListAll(r.Context(), agent, "")
+	// Pull all sessions across agents so the Active panel can show cross-agent hot work.
+	allSessions, err := h.idx.ListAll(r.Context(), "", "")
 	if err != nil {
 		http.Error(w, "failed to list sessions: "+err.Error(), 500)
 		return
@@ -514,7 +546,7 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 
 	var sess store.Session
 	for _, s := range allSessions {
-		if s.ID == id {
+		if s.Agent == agent && s.ID == id {
 			sess = s
 			break
 		}
@@ -541,10 +573,23 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		ToolNames:    toolNames,
 		Stats:        stats,
 		StreamOffset: streamOffset,
+		HotSessions:  buildHotSessions(allSessions, agent, id, hotPanelLimit),
 	}
 	if err := sessionTmpl.ExecuteTemplate(w, "session.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+func (h *handlers) handleHotJSON(w http.ResponseWriter, r *http.Request) {
+	sessions, err := h.idx.ListAll(r.Context(), "", "")
+	if err != nil {
+		http.Error(w, "failed to list sessions: "+err.Error(), 500)
+		return
+	}
+	hot := buildHotSessions(sessions, "", "", hotPanelLimit+1) // +1 so client can drop current and still fill
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(hot)
 }
 
 func (h *handlers) handleNotify(w http.ResponseWriter, r *http.Request) {

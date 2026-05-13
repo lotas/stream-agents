@@ -192,6 +192,78 @@ document.addEventListener('DOMContentLoaded', () => {
     es.onerror = () => es.close();
   }
 
+  // ── Active sessions panel (poll /hot.json) ───────────────────────────
+  (function () {
+    const section = document.getElementById('hot-section');
+    const list = document.getElementById('hot-list');
+    if (!section || !list) return;
+
+    const myAgent = document.body.dataset.sessionAgent;
+    const myId    = document.body.dataset.sessionId;
+    const LIMIT = 8;
+
+    function shortPathJS(p) {
+      return p.replace(/^\/(?:Users|home)\/[^/]+\//, '~/');
+    }
+
+    function renderHot(items) {
+      const filtered = items
+        .filter(it => !(it.agent === myAgent && it.id === myId))
+        .slice(0, LIMIT);
+      if (filtered.length === 0) {
+        section.hidden = true;
+        list.replaceChildren();
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const it of filtered) {
+        const li = document.createElement('li');
+        li.className = 'hot-item';
+
+        const a = document.createElement('a');
+        a.href = `/session/${encodeURIComponent(it.agent)}/${encodeURIComponent(it.id)}`;
+
+        const dot = document.createElement('span');
+        dot.className = 'hot-dot';
+        dot.setAttribute('aria-hidden', 'true');
+
+        const title = document.createElement('span');
+        title.className = 'hot-title';
+        title.textContent = it.title || '(no title)';
+
+        const meta = document.createElement('span');
+        meta.className = 'hot-meta';
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-' + it.agent;
+        badge.textContent = it.agent;
+        const proj = document.createElement('span');
+        proj.className = 'hot-project';
+        proj.textContent = shortPathJS(it.project || '');
+        meta.appendChild(badge);
+        meta.appendChild(document.createTextNode(' · '));
+        meta.appendChild(proj);
+
+        a.appendChild(dot);
+        a.appendChild(title);
+        a.appendChild(meta);
+        li.appendChild(a);
+        frag.appendChild(li);
+      }
+      list.replaceChildren(frag);
+      section.hidden = false;
+    }
+
+    async function refreshHot() {
+      try {
+        const r = await fetch('/hot.json', { cache: 'no-store' });
+        if (!r.ok) return;
+        renderHot(await r.json());
+      } catch (_) { /* network blip — keep last render */ }
+    }
+
+    setInterval(refreshHot, 20_000);
+  })();
+
   // ── Global /notify subscription ──────────────────────────────────────
   (function () {
     const notifyRoot = document.getElementById('notify-root');

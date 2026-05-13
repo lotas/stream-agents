@@ -194,6 +194,47 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 }
 .toc-list a:hover { color: #0066cc; }
 
+/* ── Hot ("Active") panel ─────────────────────────────────────────────────── */
+#hot-section { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #eee; }
+.hot-list { margin: 0; padding: 0; list-style: none; }
+.hot-item { margin-bottom: 0.4rem; }
+.hot-item:last-child { margin-bottom: 0; }
+.hot-item a {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.4rem;
+  row-gap: 0.1rem;
+  align-items: center;
+  text-decoration: none;
+  color: #444;
+  padding: 0.25rem 0.35rem;
+  border-radius: 4px;
+}
+.hot-item a:hover { background: #f3f4f6; color: #0066cc; }
+.hot-item .hot-dot { grid-row: 1 / span 2; }
+.hot-item .hot-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.hot-item .hot-meta {
+  grid-column: 2;
+  font-size: 0.68rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.hot-item .hot-meta .badge { padding: 0.02rem 0.35rem; font-size: 0.62rem; }
+.hot-item .hot-project { overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Transcript ───────────────────────────────────────────────────────────── */
 .transcript { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
 .msg { background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.07); overflow: hidden; }

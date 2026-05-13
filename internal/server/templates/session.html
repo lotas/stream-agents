@@ -44,6 +44,20 @@
       {{end}}
     </div>
     {{end}}
+    <div id="hot-section"{{if not .HotSessions}} hidden{{end}}>
+      <h6 class="toc-heading">Active</h6>
+      <ul class="hot-list" id="hot-list">
+        {{range .HotSessions}}
+        <li class="hot-item">
+          <a href="/session/{{.Agent}}/{{.ID}}">
+            <span class="hot-dot" aria-hidden="true"></span>
+            <span class="hot-title">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</span>
+            <span class="hot-meta"><span class="badge badge-{{.Agent}}">{{.Agent}}</span> · <span class="hot-project">{{shortPath .Project}}</span></span>
+          </a>
+        </li>
+        {{end}}
+      </ul>
+    </div>
     {{if .Turns}}
     <h6 class="toc-heading">Turns</h6>
     <ul class="toc-list">
