@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,66 +171,72 @@ func parseCodexJSONL(fpath string) ([]Message, error) {
 		return nil, err
 	}
 	defer f.Close()
+	return ParseCodexMessages(f)
+}
 
-	type codexLine struct {
+// ParseCodexMessages parses Codex JSONL messages from r.
+func ParseCodexMessages(r io.Reader) ([]Message, error) {
+	var msgs []Message
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 4<<20), 4<<20)
+	for scanner.Scan() {
+		msgs = append(msgs, ParseCodexJSONLLine(scanner.Bytes())...)
+	}
+	return msgs, scanner.Err()
+}
+
+// ParseCodexJSONLLine parses a single raw JSONL line from a Codex session file.
+func ParseCodexJSONLLine(data []byte) []Message {
+	var line struct {
 		Timestamp time.Time       `json:"timestamp"`
 		Type      string          `json:"type"`
 		Payload   json.RawMessage `json:"payload"`
 	}
-
-	var msgs []Message
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 4<<20), 4<<20)
-	for scanner.Scan() {
-		var line codexLine
-		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
-			continue
+	if json.Unmarshal(data, &line) != nil {
+		return nil
+	}
+	switch line.Type {
+	case "event_msg":
+		var payload struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
 		}
-
-		switch line.Type {
-		case "event_msg":
-			var payload struct {
-				Type    string `json:"type"`
-				Message string `json:"message"`
+		if json.Unmarshal(line.Payload, &payload) != nil {
+			return nil
+		}
+		switch payload.Type {
+		case "user_message":
+			return []Message{{Role: "user", Text: payload.Message, Time: line.Timestamp}}
+		case "agent_message":
+			return []Message{{Role: "assistant", Text: payload.Message, Time: line.Timestamp}}
+		}
+	case "response_item":
+		var payload struct {
+			Type      string `json:"type"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+			CallID    string `json:"call_id"`
+			Output    string `json:"output"`
+		}
+		if json.Unmarshal(line.Payload, &payload) != nil {
+			return nil
+		}
+		switch payload.Type {
+		case "function_call":
+			args := payload.Arguments
+			if len(args) > 200 {
+				args = args[:200] + "…"
 			}
-			if err := json.Unmarshal(line.Payload, &payload); err != nil {
-				continue
+			meta := map[string]any{"name": payload.Name, "call_id": payload.CallID, "input": args}
+			return []Message{{Role: "tool_call", Text: payload.Name, Meta: meta, Time: line.Timestamp}}
+		case "function_call_output":
+			out := payload.Output
+			if idx := strings.Index(out, "\nOutput:\n"); idx >= 0 {
+				out = out[idx+len("\nOutput:\n"):]
 			}
-			switch payload.Type {
-			case "user_message":
-				msgs = append(msgs, Message{Role: "user", Text: payload.Message, Time: line.Timestamp})
-			case "agent_message":
-				msgs = append(msgs, Message{Role: "assistant", Text: payload.Message, Time: line.Timestamp})
-			}
-
-		case "response_item":
-			var payload struct {
-				Type      string `json:"type"`
-				Name      string `json:"name"`
-				Arguments string `json:"arguments"`
-				CallID    string `json:"call_id"`
-				Output    string `json:"output"`
-			}
-			if err := json.Unmarshal(line.Payload, &payload); err != nil {
-				continue
-			}
-			switch payload.Type {
-			case "function_call":
-				args := payload.Arguments
-				if len(args) > 200 {
-					args = args[:200] + "…"
-				}
-				meta := map[string]any{"name": payload.Name, "call_id": payload.CallID, "input": args}
-				msgs = append(msgs, Message{Role: "tool_call", Text: payload.Name, Meta: meta, Time: line.Timestamp})
-			case "function_call_output":
-				out := payload.Output
-				if idx := strings.Index(out, "\nOutput:\n"); idx >= 0 {
-					out = out[idx+len("\nOutput:\n"):]
-				}
-				meta := map[string]any{"call_id": payload.CallID}
-				msgs = append(msgs, Message{Role: "tool_result", Text: out, Meta: meta, Time: line.Timestamp})
-			}
+			meta := map[string]any{"call_id": payload.CallID}
+			return []Message{{Role: "tool_result", Text: out, Meta: meta, Time: line.Timestamp}}
 		}
 	}
-	return msgs, scanner.Err()
+	return nil
 }

@@ -21,6 +21,7 @@ func NewMux(idx *store.Index) http.Handler {
 	sub, _ := fs.Sub(assetsFS, "assets")
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(sub))))
 	mux.HandleFunc("/session/{agent}/{id}", h.handleSession)
+	mux.HandleFunc("/stream/{agent}/{id}", h.handleStream)
 	mux.HandleFunc("/", h.handleList)
 	return mux
 }

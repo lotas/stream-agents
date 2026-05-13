@@ -1,15 +1,19 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,13 +32,15 @@ func shortPath(path string) string {
 
 var funcMap = template.FuncMap{
 	"shortPath":   shortPath,
-	"fmtTokens":  fmtTokens,
+	"fmtTokens":   fmtTokens,
 	"fmtDuration": func(d time.Duration) string { return formatDuration(d) },
+	"isHot":       func(t time.Time) bool { return time.Since(t) < 10*time.Minute },
 }
 
 var (
-	listTmpl    = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/list.html"))
-	sessionTmpl = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/session.html"))
+	listTmpl       = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/list.html"))
+	sessionTmpl    = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "templates/layout.html", "templates/session.html", "templates/view_item.html"))
+	streamItemTmpl = template.Must(template.New("view-item").Funcs(funcMap).ParseFS(tmplFS, "templates/view_item.html"))
 )
 
 type handlers struct {
@@ -264,12 +270,19 @@ type sessionStats struct {
 }
 
 type sessionData struct {
-	PageTitle string
-	Session   store.Session
-	Items     []viewItem
-	Turns     []turn
-	ToolNames []toolNameCount
-	Stats     sessionStats
+	PageTitle    string
+	Session      store.Session
+	Items        []viewItem
+	Turns        []turn
+	ToolNames    []toolNameCount
+	Stats        sessionStats
+	StreamOffset int64 // file size at render time; non-zero only for hot sessions
+}
+
+func renderItem(item viewItem) string {
+	var buf strings.Builder
+	_ = streamItemTmpl.ExecuteTemplate(&buf, "view-item", item)
+	return buf.String()
 }
 
 func formatElapsed(d time.Duration) string {
@@ -509,19 +522,301 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 
 	items, turns, toolNames, stats := buildViewItems(msgs)
 
+	var streamOffset int64
+	if time.Since(sess.Modified) < 10*time.Minute {
+		if fi, err := os.Stat(fpath); err == nil {
+			streamOffset = fi.Size()
+		}
+	}
+
 	title := sess.Title
 	if title == "" {
 		title = sess.ID
 	}
 	data := sessionData{
-		PageTitle: title + " — stream-agents",
-		Session:   sess,
-		Items:     items,
-		Turns:     turns,
-		ToolNames: toolNames,
-		Stats:     stats,
+		PageTitle:    title + " — stream-agents",
+		Session:      sess,
+		Items:        items,
+		Turns:        turns,
+		ToolNames:    toolNames,
+		Stats:        stats,
+		StreamOffset: streamOffset,
 	}
 	if err := sessionTmpl.ExecuteTemplate(w, "session.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
+	}
+}
+
+func (h *handlers) handleStream(w http.ResponseWriter, r *http.Request) {
+	agent := r.PathValue("agent")
+	id := r.PathValue("id")
+
+	if strings.Contains(id, "/") || strings.Contains(id, "..") || strings.Contains(id, "\x00") {
+		http.NotFound(w, r)
+		return
+	}
+	if agent != "claude" && agent != "codex" {
+		http.NotFound(w, r)
+		return
+	}
+
+	if _, err := h.idx.ListAll(r.Context(), agent, ""); err != nil {
+		http.Error(w, "failed to list sessions: "+err.Error(), 500)
+		return
+	}
+	fpath := h.idx.FilePath(agent, id)
+	if fpath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	startOffset, _ := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", 500)
+		return
+	}
+
+	parseLine := store.ParseClaudeJSONLLine
+	if agent == "codex" {
+		parseLine = store.ParseCodexJSONLLine
+	}
+
+	// Get session start time for elapsed labels.
+	var startTime time.Time
+	if tmp, err := os.Open(fpath); err == nil {
+		sc := bufio.NewScanner(tmp)
+		sc.Buffer(make([]byte, 1<<20), 1<<20)
+		for sc.Scan() {
+			var line struct {
+				Timestamp time.Time `json:"timestamp"`
+			}
+			if json.Unmarshal(sc.Bytes(), &line) == nil && !line.Timestamp.IsZero() {
+				startTime = line.Timestamp
+				break
+			}
+		}
+		tmp.Close()
+	}
+
+	elapsed := func(t time.Time) string {
+		if t.IsZero() || startTime.IsZero() {
+			return ""
+		}
+		return formatElapsed(t.Sub(startTime))
+	}
+
+	// Replay lines before startOffset to reconstruct pending tool_call state.
+	pendingByID := map[string]*toolPair{} // callID → toolPair from initial render
+	nameCounts := map[string]int{}
+	if startOffset > 0 {
+		if tmp, err := os.Open(fpath); err == nil {
+			sc := bufio.NewScanner(io.LimitReader(tmp, startOffset))
+			sc.Buffer(make([]byte, 4<<20), 4<<20)
+			for sc.Scan() {
+				for _, m := range parseLine(sc.Bytes()) {
+					switch m.Role {
+					case "tool_call":
+						name, _ := m.Meta["name"].(string)
+						nameCounts[name]++
+						inputJSON, _ := m.Meta["input"].(string)
+						callID, _ := m.Meta["id"].(string)
+						if callID == "" {
+							callID, _ = m.Meta["call_id"].(string)
+						}
+						if callID == "" {
+							break
+						}
+						anchorID := "tool-" + callID
+						pendingByID[callID] = &toolPair{
+							Name:         name,
+							Index:        nameCounts[name],
+							InputJSON:    inputJSON,
+							InputPreview: toolInputPreview(name, inputJSON),
+							AnchorID:     anchorID,
+							TimeLabel:    elapsed(m.Time),
+							callTime:     m.Time,
+						}
+					case "tool_result":
+						resultID, _ := m.Meta["tool_use_id"].(string)
+						if resultID == "" {
+							resultID, _ = m.Meta["call_id"].(string)
+						}
+						delete(pendingByID, resultID)
+					}
+				}
+			}
+			tmp.Close()
+		}
+	}
+
+	// Streaming state for new messages arriving after startOffset.
+	newNameCounts := map[string]int{}
+	newPendingByID := map[string]int{} // callID → index in newItems
+	var newItems []viewItem
+
+	sendSSE := func(event, data string) {
+		fmt.Fprintf(w, "event: %s\n", event)
+		for _, line := range strings.Split(data, "\n") {
+			fmt.Fprintf(w, "data: %s\n", line)
+		}
+		fmt.Fprintf(w, "\n")
+		flusher.Flush()
+	}
+
+	processMsg := func(m store.Message) {
+		switch m.Role {
+		case "tool_call":
+			name, _ := m.Meta["name"].(string)
+			nameCounts[name]++
+			newNameCounts[name]++
+			inputJSON, _ := m.Meta["input"].(string)
+			callID, _ := m.Meta["id"].(string)
+			if callID == "" {
+				callID, _ = m.Meta["call_id"].(string)
+			}
+			anchorID := "tool-" + callID
+			if callID == "" {
+				anchorID = fmt.Sprintf("tool-%s-%d", name, nameCounts[name])
+			}
+			pair := &toolPair{
+				Name:         name,
+				Index:        nameCounts[name],
+				InputJSON:    inputJSON,
+				InputPreview: toolInputPreview(name, inputJSON),
+				Pending:      true,
+				AnchorID:     anchorID,
+				TimeLabel:    elapsed(m.Time),
+				callTime:     m.Time,
+			}
+			if callID != "" {
+				newPendingByID[callID] = len(newItems)
+			}
+			item := viewItem{Kind: "tool", Tool: pair}
+			newItems = append(newItems, item)
+			sendSSE("append", renderItem(item))
+
+		case "tool_result":
+			resultID, _ := m.Meta["tool_use_id"].(string)
+			if resultID == "" {
+				resultID, _ = m.Meta["call_id"].(string)
+			}
+			isError, _ := m.Meta["is_error"].(bool)
+			out, pre := renderToolOutput(m.Text)
+
+			// Result for a tool_call from the initial page render.
+			if pair, found := pendingByID[resultID]; found {
+				pair.Output = out
+				pair.OutputPre = pre
+				pair.IsError = isError
+				pair.Pending = false
+				if !pair.callTime.IsZero() && !m.Time.IsZero() {
+					pair.ExecLabel = formatExec(m.Time.Sub(pair.callTime))
+				}
+				delete(pendingByID, resultID)
+				patchJSON, _ := json.Marshal(map[string]string{
+					"id":   pair.AnchorID,
+					"html": renderItem(viewItem{Kind: "tool", Tool: pair}),
+				})
+				sendSSE("patch", string(patchJSON))
+				return
+			}
+
+			// Result for a tool_call that arrived in this stream.
+			if idx, found := newPendingByID[resultID]; found {
+				newItems[idx].Tool.Output = out
+				newItems[idx].Tool.OutputPre = pre
+				newItems[idx].Tool.IsError = isError
+				newItems[idx].Tool.Pending = false
+				if !newItems[idx].Tool.callTime.IsZero() && !m.Time.IsZero() {
+					newItems[idx].Tool.ExecLabel = formatExec(m.Time.Sub(newItems[idx].Tool.callTime))
+				}
+				delete(newPendingByID, resultID)
+				patchJSON, _ := json.Marshal(map[string]string{
+					"id":   newItems[idx].Tool.AnchorID,
+					"html": renderItem(newItems[idx]),
+				})
+				sendSSE("patch", string(patchJSON))
+				return
+			}
+
+			// Orphan result.
+			item := viewItem{Kind: "tool", Tool: &toolPair{Output: out, OutputPre: pre, IsError: isError, TimeLabel: elapsed(m.Time)}}
+			newItems = append(newItems, item)
+			sendSSE("append", renderItem(item))
+
+		case "user":
+			vi := viewItem{Kind: "text", Role: "user", Body: render.RenderMarkdown(m.Text), TimeLabel: elapsed(m.Time)}
+			if summary := skillSummary(m.Text); summary != "" {
+				vi.Collapsible = true
+				vi.CollapseSummary = summary
+			}
+			newItems = append(newItems, vi)
+			sendSSE("append", renderItem(vi))
+
+		case "assistant":
+			vi := viewItem{Kind: "text", Role: "assistant", Body: render.RenderMarkdown(m.Text), TimeLabel: elapsed(m.Time)}
+			newItems = append(newItems, vi)
+			sendSSE("append", renderItem(vi))
+
+		case "system":
+			vi := viewItem{Kind: "text", Role: "system", Body: template.HTML(html.EscapeString(m.Text))}
+			newItems = append(newItems, vi)
+			sendSSE("append", renderItem(vi))
+		}
+	}
+
+	// Tail loop: poll the file every 500ms for new content.
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	currentOffset := startOffset
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			fi, err := os.Stat(fpath)
+			if err != nil || fi.Size() <= currentOffset {
+				fmt.Fprintf(w, ": keepalive\n\n")
+				flusher.Flush()
+				continue
+			}
+
+			chunk := make([]byte, fi.Size()-currentOffset)
+			f, err := os.Open(fpath)
+			if err != nil {
+				continue
+			}
+			f.Seek(currentOffset, io.SeekStart)
+			n, _ := io.ReadFull(f, chunk)
+			f.Close()
+
+			if n == 0 {
+				continue
+			}
+			// Only process up to the last complete line.
+			lastNL := bytes.LastIndexByte(chunk[:n], '\n')
+			if lastNL < 0 {
+				continue
+			}
+			sc := bufio.NewScanner(bytes.NewReader(chunk[:lastNL+1]))
+			sc.Buffer(make([]byte, 4<<20), 4<<20)
+			for sc.Scan() {
+				line := bytes.TrimSpace(sc.Bytes())
+				if len(line) == 0 {
+					continue
+				}
+				for _, msg := range parseLine(line) {
+					processMsg(msg)
+				}
+			}
+			currentOffset += int64(lastNL + 1)
+		}
 	}
 }

@@ -9,7 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ── Copy buttons on <pre> blocks ────────────────────────────────────────
-  document.querySelectorAll('pre').forEach(pre => {
+  function attachCopyBtn(pre) {
+    if (pre.querySelector('.copy-btn')) return;
     const btn = document.createElement('button');
     btn.className = 'copy-btn';
     btn.textContent = 'Copy';
@@ -22,7 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     pre.style.position = 'relative';
     pre.appendChild(btn);
-  });
+  }
+  document.querySelectorAll('pre').forEach(pre => attachCopyBtn(pre));
 
   // ── Filter toolbar ───────────────────────────────────────────────────────
   const STORAGE_KEY = 'stream-agents.filters';
@@ -130,4 +132,47 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   applyState();
+
+  // ── Session streaming (hot sessions only) ────────────────────────────────
+  const transcript = document.querySelector('.transcript[data-stream]');
+  if (transcript) {
+    const url = `${transcript.dataset.stream}?offset=${transcript.dataset.streamOffset}`;
+    const es = new EventSource(url);
+
+    let atBottom = true;
+    window.addEventListener('scroll', () => {
+      const distFromBottom = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      atBottom = distFromBottom < 150;
+    }, { passive: true });
+
+    function appendToTranscript(html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html.trim();
+      const el = tmp.firstElementChild;
+      if (!el) return;
+      transcript.appendChild(el);
+      el.querySelectorAll('pre').forEach(pre => attachCopyBtn(pre));
+      if (el.classList.contains('tool-pair') && el.dataset.tool) {
+        if (state.hiddenTools.includes(el.dataset.tool)) el.style.display = 'none';
+      }
+      if (atBottom) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    }
+
+    es.addEventListener('append', e => appendToTranscript(e.data));
+
+    es.addEventListener('patch', e => {
+      const { id, html } = JSON.parse(e.data);
+      const el = document.getElementById(id);
+      if (!el) return;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html.trim();
+      const newEl = tmp.firstElementChild;
+      if (newEl) {
+        el.replaceWith(newEl);
+        newEl.querySelectorAll('pre').forEach(pre => attachCopyBtn(pre));
+      }
+    });
+
+    es.onerror = () => es.close();
+  }
 });

@@ -40,7 +40,7 @@
     <tr>
       <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
-      <td><a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></td>
+      <td><div class="title-wrap">{{if isHot .Modified}}<span class="hot-dot" title="Active in the last 10 minutes"></span>{{end}}<a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></div></td>
       <td class="stat-cell">{{if .Duration}}{{fmtDuration .Duration}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="stat-cell">{{if .InputTokens}}{{fmtTokens .InputTokens}}<span class="tok-sep">/</span>{{fmtTokens .OutputTokens}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="mtime">{{.Modified.Format "2006-01-02 15:04"}}</td>

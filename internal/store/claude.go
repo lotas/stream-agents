@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,33 +221,41 @@ func parseClaudeJSONL(fpath string) ([]Message, error) {
 		return nil, err
 	}
 	defer f.Close()
+	return ParseClaudeMessages(f)
+}
 
+// ParseClaudeMessages parses Claude JSONL messages from r.
+func ParseClaudeMessages(r io.Reader) ([]Message, error) {
 	var msgs []Message
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 4<<20), 4<<20)
 	for scanner.Scan() {
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(scanner.Bytes(), &raw); err != nil {
-			continue
-		}
-		var typ string
-		if err := json.Unmarshal(raw["type"], &typ); err != nil {
-			continue
-		}
-
-		var ts time.Time
-		if tsRaw, ok := raw["timestamp"]; ok {
-			json.Unmarshal(tsRaw, &ts)
-		}
-
-		switch typ {
-		case "user":
-			msgs = append(msgs, claudeParseUserMsg(raw, ts)...)
-		case "assistant":
-			msgs = append(msgs, claudeParseAssistantMsg(raw, ts)...)
-		}
+		msgs = append(msgs, ParseClaudeJSONLLine(scanner.Bytes())...)
 	}
 	return msgs, scanner.Err()
+}
+
+// ParseClaudeJSONLLine parses a single raw JSONL line from a Claude session file.
+func ParseClaudeJSONLLine(data []byte) []Message {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	var typ string
+	if json.Unmarshal(raw["type"], &typ) != nil {
+		return nil
+	}
+	var ts time.Time
+	if tsRaw, ok := raw["timestamp"]; ok {
+		json.Unmarshal(tsRaw, &ts)
+	}
+	switch typ {
+	case "user":
+		return claudeParseUserMsg(raw, ts)
+	case "assistant":
+		return claudeParseAssistantMsg(raw, ts)
+	}
+	return nil
 }
 
 func claudeParseUserMsg(raw map[string]json.RawMessage, ts time.Time) []Message {

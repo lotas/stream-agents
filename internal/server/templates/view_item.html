@@ -1,0 +1,30 @@
+{{define "view-item"}}
+{{if eq .Kind "tool"}}
+<details class="tool-pair{{if .Tool.IsError}} is-error{{end}}{{if .Tool.Pending}} is-pending{{end}}" data-tool="{{.Tool.Name}}" id="{{.Tool.AnchorID}}">
+  <summary>
+    <span class="tp-name">{{if .Tool.Name}}{{.Tool.Name}}{{else}}result{{end}}</span>{{if .Tool.Index}}<span class="tp-index">#{{.Tool.Index}}</span>{{end}}<span class="tp-preview">{{.Tool.InputPreview}}</span><span class="tp-meta">{{if .Tool.ExecLabel}}<span class="tp-exec">{{.Tool.ExecLabel}}</span>{{end}}{{if .Tool.IsError}}<span class="tp-status is-err">✗</span>{{else if .Tool.Pending}}<span class="tp-status">…</span>{{else}}<span class="tp-status">✓</span>{{end}}{{if .Tool.TimeLabel}}<span class="tp-time">{{.Tool.TimeLabel}}</span>{{end}}</span>
+  </summary>
+  <div class="tp-body">
+    {{if .Tool.InputJSON}}<section class="tp-section"><h6>args</h6><pre>{{.Tool.InputJSON}}</pre></section>{{end}}
+    {{if .Tool.Output}}<section class="tp-section"><h6>output</h6>{{if .Tool.OutputPre}}<pre>{{.Tool.Output}}</pre>{{else}}<div class="tp-output">{{.Tool.Output}}</div>{{end}}</section>{{end}}
+  </div>
+</details>
+{{else}}
+<div class="msg msg-{{.Role}}"{{if .TurnID}} id="{{.TurnID}}"{{end}}>
+  <div class="msg-role">{{.Role}}{{if .TimeLabel}}<span class="msg-time">{{.TimeLabel}}</span>{{end}}</div>
+  {{if eq .Role "system"}}
+  <details class="tool-block">
+    <summary>⚙ system</summary>
+    <div class="msg-body">{{.Body}}</div>
+  </details>
+  {{else if .Collapsible}}
+  <details class="tool-block">
+    <summary>{{.CollapseSummary}}</summary>
+    <div class="msg-body">{{.Body}}</div>
+  </details>
+  {{else}}
+  <div class="msg-body">{{.Body}}</div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

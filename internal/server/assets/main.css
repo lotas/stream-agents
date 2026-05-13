@@ -23,6 +23,10 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 .session-list td { padding: 0.55rem 0.8rem; border-top: 1px solid #eee; font-size: 0.9rem; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list a { color: #0066cc; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list a:hover { text-decoration: underline; }
+.title-wrap { display: flex; align-items: center; gap: 0.4rem; overflow: hidden; }
+.title-wrap a { min-width: 0; }
+.hot-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: hot-pulse 1.5s ease-in-out infinite; }
+@keyframes hot-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.7); } }
 .mtime { color: #666; white-space: nowrap; overflow: visible; text-overflow: clip; }
 .stat-cell { color: #555; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: visible; text-overflow: clip; }
 .stat-nil { color: #ccc; }
