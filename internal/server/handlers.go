@@ -26,8 +26,9 @@ func shortPath(path string) string {
 }
 
 var funcMap = template.FuncMap{
-	"shortPath":  shortPath,
-	"fmtTokens": fmtTokens,
+	"shortPath":   shortPath,
+	"fmtTokens":  fmtTokens,
+	"fmtDuration": func(d time.Duration) string { return formatDuration(d) },
 }
 
 var (

@@ -124,6 +124,7 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	count := 0
+	var firstTime, lastTime time.Time
 	for scanner.Scan() {
 		count++
 		var raw map[string]json.RawMessage
@@ -133,6 +134,15 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 		var typ string
 		if err := json.Unmarshal(raw["type"], &typ); err != nil {
 			continue
+		}
+		if tsRaw, ok := raw["timestamp"]; ok {
+			var ts time.Time
+			if json.Unmarshal(tsRaw, &ts) == nil && !ts.IsZero() {
+				if firstTime.IsZero() {
+					firstTime = ts
+				}
+				lastTime = ts
+			}
 		}
 		if typ == "user" && sess.Project == ClaudeDecodeProject(dirName) {
 			var cwd string
@@ -151,11 +161,27 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 				sess.Title = text
 			}
 		}
-		if count > 30 && sess.Title != "" {
-			break
+		if typ == "assistant" {
+			if msgRaw, ok := raw["message"]; ok {
+				var msg struct {
+					Usage *struct {
+						InputTokens         int `json:"input_tokens"`
+						OutputTokens        int `json:"output_tokens"`
+						CacheReadTokens     int `json:"cache_read_input_tokens"`
+					} `json:"usage"`
+				}
+				if json.Unmarshal(msgRaw, &msg) == nil && msg.Usage != nil {
+					sess.InputTokens += msg.Usage.InputTokens
+					sess.OutputTokens += msg.Usage.OutputTokens
+					sess.CacheReadTokens += msg.Usage.CacheReadTokens
+				}
+			}
 		}
 	}
 	sess.MessageCount = count
+	if !firstTime.IsZero() && lastTime.After(firstTime) {
+		sess.Duration = lastTime.Sub(firstTime)
+	}
 	return sess
 }
 

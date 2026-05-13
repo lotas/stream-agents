@@ -74,9 +74,9 @@
     {{end}}
     {{if .Turns}}
     <h6 class="toc-heading">Turns</h6>
-    <ol class="toc-list">
+    <ul class="toc-list">
       {{range .Turns}}<li><a href="#{{.AnchorID}}">{{.Index}}. {{.Title}}</a></li>{{end}}
-    </ol>
+    </ul>
     {{end}}
   </aside>
 </div>

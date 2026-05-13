@@ -25,10 +25,12 @@
     <col class="col-agent">
     <col class="col-project">
     <col class="col-title">
+    <col class="col-duration">
+    <col class="col-tokens">
     <col class="col-mtime">
   </colgroup>
   <thead>
-    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Modified</th></tr>
+    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Duration</th><th>Tokens</th><th>Modified</th></tr>
   </thead>
   <tbody>
     {{range .Sessions}}
@@ -36,6 +38,8 @@
       <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
       <td><a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></td>
+      <td class="stat-cell">{{if .Duration}}{{fmtDuration .Duration}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
+      <td class="stat-cell">{{if .InputTokens}}{{fmtTokens .InputTokens}}<span class="tok-sep">/</span>{{fmtTokens .OutputTokens}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="mtime">{{.Modified.Format "2006-01-02 15:04"}}</td>
     </tr>
     {{end}}

@@ -119,14 +119,22 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	count := 0
+	var firstTime, lastTime time.Time
 	for scanner.Scan() {
 		count++
 		var line struct {
-			Type    string          `json:"type"`
-			Payload json.RawMessage `json:"payload"`
+			Timestamp time.Time       `json:"timestamp"`
+			Type      string          `json:"type"`
+			Payload   json.RawMessage `json:"payload"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
 			continue
+		}
+		if !line.Timestamp.IsZero() {
+			if firstTime.IsZero() {
+				firstTime = line.Timestamp
+			}
+			lastTime = line.Timestamp
 		}
 		if line.Type == "session_meta" {
 			var meta struct {
@@ -148,11 +156,11 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 				sess.Title = t
 			}
 		}
-		if count > 30 && sess.Title != "" && sess.Project != "" {
-			break
-		}
 	}
 	sess.MessageCount = count
+	if !firstTime.IsZero() && lastTime.After(firstTime) {
+		sess.Duration = lastTime.Sub(firstTime)
+	}
 	return sess
 }
 
