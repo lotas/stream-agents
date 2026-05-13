@@ -1,24 +1,25 @@
 {{template "layout.html" .}}
 {{define "content"}}
+{{$d := .}}
 <section class="filters">
   <div class="filter-group">
-    <button class="chip" data-agent-filter="all" aria-pressed="true">All agents</button>
-    <button class="chip badge-claude" data-agent-filter="claude">Claude</button>
-    <button class="chip badge-codex"  data-agent-filter="codex">Codex</button>
+    <a class="chip" href="{{.URL "agent" ""}}"       {{if eq .AgentFilter ""}}aria-pressed="true"{{end}}>All agents</a>
+    <a class="chip badge-claude" href="{{.URL "agent" "claude"}}" {{if eq .AgentFilter "claude"}}aria-pressed="true"{{end}}>Claude</a>
+    <a class="chip badge-codex"  href="{{.URL "agent" "codex"}}"  {{if eq .AgentFilter "codex"}}aria-pressed="true"{{end}}>Codex</a>
   </div>
   <div class="filter-group">
     <select id="project-filter" class="filter-select">
-      <option value="">All projects</option>
+      <option value="{{.URL "project" ""}}">All projects</option>
       {{range .Projects}}
-      <option value="{{.}}">{{shortPath .}}</option>
+      <option value="{{$d.URL "project" .}}" {{if eq . $d.ProjectFilter}}selected{{end}}>{{shortPath .}}</option>
       {{end}}
     </select>
   </div>
   <div class="filter-group">
-    <button class="chip" data-date-filter="today" aria-pressed="true">Today</button>
-    <button class="chip" data-date-filter="yesterday">Yesterday</button>
-    <button class="chip" data-date-filter="week">Last 7 days</button>
-    <button class="chip" data-date-filter="all">All time</button>
+    <a class="chip" href="{{.URL "date" "today"}}"     {{if eq .DateFilter "today"}}aria-pressed="true"{{end}}>Today</a>
+    <a class="chip" href="{{.URL "date" "yesterday"}}" {{if eq .DateFilter "yesterday"}}aria-pressed="true"{{end}}>Yesterday</a>
+    <a class="chip" href="{{.URL "date" "week"}}"      {{if eq .DateFilter "week"}}aria-pressed="true"{{end}}>Last 7 days</a>
+    <a class="chip" href="{{.URL "date" "all"}}"       {{if eq .DateFilter "all"}}aria-pressed="true"{{end}}>All time</a>
   </div>
 </section>
 <div class="table-wrap">
@@ -36,7 +37,7 @@
   </thead>
   <tbody>
     {{range .Sessions}}
-    <tr data-date="{{.Modified.Format "2006-01-02"}}" data-agent="{{.Agent}}" data-project="{{.Project}}">
+    <tr>
       <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
       <td><a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></td>

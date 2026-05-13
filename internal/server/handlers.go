@@ -6,6 +6,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,6 +47,64 @@ type listData struct {
 	Projects      []string
 	AgentFilter   string
 	ProjectFilter string
+	DateFilter    string
+}
+
+// URL builds a "/" URL preserving the current filters, with optional overrides
+// passed as alternating key/value strings ("agent","claude","date","yesterday"...).
+// Empty values remove the param. "today" is the default for date and is omitted
+// to keep bare URLs clean.
+func (d listData) URL(kvs ...string) string {
+	params := map[string]string{
+		"agent":   d.AgentFilter,
+		"project": d.ProjectFilter,
+		"date":    d.DateFilter,
+	}
+	for i := 0; i+1 < len(kvs); i += 2 {
+		params[kvs[i]] = kvs[i+1]
+	}
+	v := url.Values{}
+	if params["agent"] != "" {
+		v.Set("agent", params["agent"])
+	}
+	if params["project"] != "" {
+		v.Set("project", params["project"])
+	}
+	if params["date"] != "" && params["date"] != "today" {
+		v.Set("date", params["date"])
+	}
+	if len(v) == 0 {
+		return "/"
+	}
+	return "/?" + v.Encode()
+}
+
+func filterByDate(sessions []store.Session, dateFilter string) []store.Session {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	var from, to time.Time
+	switch dateFilter {
+	case "today":
+		from = today
+	case "yesterday":
+		from = today.AddDate(0, 0, -1)
+		to = today
+	case "week":
+		from = today.AddDate(0, 0, -6)
+	default: // "all" or unrecognised
+		return sessions
+	}
+	out := sessions[:0]
+	for _, s := range sessions {
+		if !from.IsZero() && s.Modified.Before(from) {
+			continue
+		}
+		if !to.IsZero() && !s.Modified.Before(to) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
@@ -57,12 +116,17 @@ func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
 
 	agentFilter := r.URL.Query().Get("agent")
 	projectFilter := r.URL.Query().Get("project")
+	dateFilter := r.URL.Query().Get("date")
+	if dateFilter == "" {
+		dateFilter = "today"
+	}
 
 	sessions, err := h.idx.ListAll(r.Context(), agentFilter, projectFilter)
 	if err != nil {
 		http.Error(w, "failed to list sessions: "+err.Error(), 500)
 		return
 	}
+	sessions = filterByDate(sessions, dateFilter)
 
 	data := listData{
 		PageTitle:     "Sessions — stream-agents",
@@ -70,6 +134,7 @@ func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
 		Projects:      h.idx.Projects(),
 		AgentFilter:   agentFilter,
 		ProjectFilter: projectFilter,
+		DateFilter:    dateFilter,
 	}
 	if err := listTmpl.ExecuteTemplate(w, "list.html", data); err != nil {
 		http.Error(w, err.Error(), 500)
