@@ -5,6 +5,16 @@ Claude and Codex JSONL session files, lists them by project and modified time,
 and renders each transcript with Markdown, turn navigation, and collapsible tool
 calls.
 
+## Screenshots
+
+Session list:
+
+![Session list](docs/screenshots/listing.png)
+
+Transcript view:
+
+![Transcript view](docs/screenshots/session.png)
+
 ## Requirements
 
 - Go 1.23.6 or newer
