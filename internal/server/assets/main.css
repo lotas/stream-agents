@@ -4,7 +4,10 @@ header { background: #1a1a1a; color: #fff; padding: 0.75rem 1.5rem; }
 header a.brand { color: #fff; text-decoration: none; font-weight: 600; font-size: 1.1rem; }
 main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 
-.filters form { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.filters { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.filter-group { display: flex; align-items: center; gap: 0.4rem; }
+.filter-group + .filter-group { padding-left: 0.6rem; border-left: 1px solid #ddd; }
+.filter-select { padding: 0.2rem 0.5rem; border: 1px solid #ccc; border-radius: 999px; font-size: 0.78rem; background: #fff; cursor: pointer; }
 .filters label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
 .filters select { padding: 0.35rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
 

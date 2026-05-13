@@ -1,23 +1,25 @@
 {{template "layout.html" .}}
 {{define "content"}}
 <section class="filters">
-  <form method="get" action="/">
-    <label>Agent
-      <select name="agent" onchange="this.form.submit()">
-        <option value="">All agents</option>
-        <option value="claude" {{if eq .AgentFilter "claude"}}selected{{end}}>Claude</option>
-        <option value="codex"  {{if eq .AgentFilter "codex"}}selected{{end}}>Codex</option>
-      </select>
-    </label>
-    <label>Project
-      <select name="project" onchange="this.form.submit()">
-        <option value="">All projects</option>
-        {{range .Projects}}
-        <option value="{{.}}" {{if eq . $.ProjectFilter}}selected{{end}}>{{shortPath .}}</option>
-        {{end}}
-      </select>
-    </label>
-  </form>
+  <div class="filter-group">
+    <button class="chip" data-agent-filter="all" aria-pressed="true">All agents</button>
+    <button class="chip badge-claude" data-agent-filter="claude">Claude</button>
+    <button class="chip badge-codex"  data-agent-filter="codex">Codex</button>
+  </div>
+  <div class="filter-group">
+    <select id="project-filter" class="filter-select">
+      <option value="">All projects</option>
+      {{range .Projects}}
+      <option value="{{.}}">{{shortPath .}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div class="filter-group">
+    <button class="chip" data-date-filter="today" aria-pressed="true">Today</button>
+    <button class="chip" data-date-filter="yesterday">Yesterday</button>
+    <button class="chip" data-date-filter="week">Last 7 days</button>
+    <button class="chip" data-date-filter="all">All time</button>
+  </div>
 </section>
 <div class="table-wrap">
 <table class="session-list">
@@ -34,7 +36,7 @@
   </thead>
   <tbody>
     {{range .Sessions}}
-    <tr>
+    <tr data-date="{{.Modified.Format "2006-01-02"}}" data-agent="{{.Agent}}" data-project="{{.Project}}">
       <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
       <td><a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></td>

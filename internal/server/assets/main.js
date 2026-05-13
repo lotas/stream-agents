@@ -1,4 +1,55 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // ── List page filters (agent + project + date) ──────────────────────────
+  const listRows = document.querySelectorAll('.session-list tbody tr[data-date]');
+  if (listRows.length) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const weekAgo   = new Date(today); weekAgo.setDate(today.getDate() - 6);
+
+    let activeAgent = 'all';
+    let activeDate  = 'today';
+    let activeProject = '';
+
+    function applyListFilters() {
+      listRows.forEach(row => {
+        const d = new Date(row.dataset.date);
+        const dateMatch = activeDate === 'all'       ? true
+                        : activeDate === 'today'     ? d >= today
+                        : activeDate === 'yesterday' ? d >= yesterday && d < today
+                        : /* week */                   d >= weekAgo;
+        const agentMatch   = activeAgent === 'all' || row.dataset.agent === activeAgent;
+        const projectMatch = activeProject === ''  || row.dataset.project === activeProject;
+        row.style.display = dateMatch && agentMatch && projectMatch ? '' : 'none';
+      });
+    }
+
+    document.querySelectorAll('[data-agent-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeAgent = btn.dataset.agentFilter;
+        document.querySelectorAll('[data-agent-filter]').forEach(b =>
+          b.setAttribute('aria-pressed', String(b.dataset.agentFilter === activeAgent)));
+        applyListFilters();
+      });
+    });
+
+    document.querySelectorAll('[data-date-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeDate = btn.dataset.dateFilter;
+        document.querySelectorAll('[data-date-filter]').forEach(b =>
+          b.setAttribute('aria-pressed', String(b.dataset.dateFilter === activeDate)));
+        applyListFilters();
+      });
+    });
+
+    const projectSel = document.getElementById('project-filter');
+    if (projectSel) {
+      projectSel.addEventListener('change', () => { activeProject = projectSel.value; applyListFilters(); });
+    }
+
+    applyListFilters(); // apply "today" default on load
+  }
+
+
   // ── Copy buttons on <pre> blocks ────────────────────────────────────────
   document.querySelectorAll('pre').forEach(pre => {
     const btn = document.createElement('button');
