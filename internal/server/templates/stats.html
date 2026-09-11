@@ -18,6 +18,19 @@
   <div><span>Total session duration</span><strong>{{fmtDuration .Total.Duration}}</strong></div>
 </div>
 <p class="stats-note">Token usage available for {{template "stats-number" .Total.WithTokens}} of {{template "stats-number" .Total.Sessions}} sessions. Total tokens include uncached input, output, cache reads, and cache writes. Missing usage is excluded. Duration is elapsed session time, including idle time; records are transcript log entries.</p>
+{{range .Heatmaps}}
+<section class="activity" aria-labelledby="activity-title-{{.Year}}">
+<h2 id="activity-title-{{.Year}}">Daily activity · {{.Year}}</h2>
+<p class="stats-note">{{template "stats-number" .Sessions}} sessions across {{.ActiveDays}} active days. Color shows sessions per day, relative to the busiest day in this year. Current filters apply.</p>
+<div class="activity-scroll">
+<div class="activity-calendar">
+<div class="activity-weekdays" aria-hidden="true"><span></span><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+{{range .Weeks}}<div class="activity-week"><span class="activity-month">{{.Month}}</span>{{range .Days}}{{if .Outside}}<span class="activity-day activity-outside" aria-hidden="true"></span>{{else}}<span class="activity-day activity-level-{{.Level}}" tabindex="0" aria-label="{{.Detail}}" data-detail="{{.Detail}}"><span class="activity-tooltip" role="tooltip">{{.Detail}}</span></span>{{end}}{{end}}</div>{{end}}
+</div>
+</div>
+<div class="activity-legend" aria-label="Color scale from less to more activity"><span>Less</span><i class="activity-day activity-level-0"></i><i class="activity-day activity-level-1"></i><i class="activity-day activity-level-2"></i><i class="activity-day activity-level-3"></i><i class="activity-day activity-level-4"></i><span>More</span></div>
+</section>
+{{end}}
 {{if .Periods}}
 <h2>By {{.Group}}</h2>
 {{template "stats-table" .Periods}}

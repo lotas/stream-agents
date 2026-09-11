@@ -150,17 +150,17 @@ func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
 // toolPair is a fused tool_call + tool_result pair.
 type toolPair struct {
 	Name         string
-	Index        int    // 1-based per-name occurrence
-	InputJSON    string // truncated input from Meta["input"]
-	InputPreview string // 1-line summary for the chip header
-	Output    template.HTML // tool_result content
-	OutputPre bool          // true → wrap in <pre>, false → rendered markdown div
-	IsError   bool
-	Pending   bool   // no matching result seen yet
-	AnchorID  string
-	TimeLabel string // elapsed from session start, e.g. "+1m 23s"
-	ExecLabel string // tool execution duration, e.g. "0.3s"
-	callTime  time.Time
+	Index        int           // 1-based per-name occurrence
+	InputJSON    string        // truncated input from Meta["input"]
+	InputPreview string        // 1-line summary for the chip header
+	Output       template.HTML // tool_result content
+	OutputPre    bool          // true → wrap in <pre>, false → rendered markdown div
+	IsError      bool
+	Pending      bool // no matching result seen yet
+	AnchorID     string
+	TimeLabel    string // elapsed from session start, e.g. "+1m 23s"
+	ExecLabel    string // tool execution duration, e.g. "0.3s"
+	callTime     time.Time
 }
 
 // viewItem is one renderable unit in the session transcript.
@@ -338,6 +338,9 @@ func formatDuration(d time.Duration) string {
 	s = s % 60
 	if m < 60 {
 		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	if m >= 24*60 {
+		return fmt.Sprintf("%dd %dh", m/(24*60), (m/60)%24)
 	}
 	return fmt.Sprintf("%dh %dm", m/60, m%60)
 }

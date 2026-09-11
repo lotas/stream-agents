@@ -443,3 +443,25 @@ header nav a:hover { text-decoration: underline; }
 .filters input[type="date"] { padding: 0.35rem; border: 1px solid #ccc; border-radius: 4px; }
 .filters select[name="project"] { max-width: min(350px, 80vw); }
 .stats-empty { padding: 2rem; text-align: center; background: #fff; border-radius: 6px; }
+
+.activity { margin-top: 1.5rem; padding: 1rem; background: #fff; border: 1px solid #ddd; border-radius: 6px; }
+.activity h2 { margin-top: 0; font-size: 1.1rem; }
+.activity-scroll { overflow-x: auto; padding: 2.5rem 0 0.75rem; }
+.activity-calendar { display: flex; gap: 4px; width: max-content; }
+.activity-week, .activity-weekdays { display: grid; grid-template-rows: 20px repeat(7, 12px); gap: 4px; }
+.activity-week { width: 12px; }
+.activity-weekdays { width: 30px; font-size: 10px; color: #666; }
+.activity-month { font-size: 10px; color: #666; white-space: nowrap; }
+.activity-day { display: inline-block; width: 12px; height: 12px; border-radius: 2px; box-shadow: inset 0 0 0 1px #1b1f230d; }
+.activity-level-0 { background: #ebedf0; }
+.activity-level-1 { background: #9be9a8; }
+.activity-level-2 { background: #40c463; }
+.activity-level-3 { background: #30a14e; }
+.activity-level-4 { background: #216e39; }
+.activity-outside { visibility: hidden; }
+.activity-day[tabindex] { position: relative; cursor: help; }
+.activity-day[tabindex]:hover, .activity-day[tabindex]:focus { outline: 2px solid #1a1a1a; outline-offset: 1px; z-index: 1; }
+.activity-tooltip { display: none; position: absolute; bottom: 18px; left: 0; width: 180px; padding: 6px 8px; border-radius: 4px; background: #1a1a1a; color: #fff; font-size: 11px; line-height: 1.5; pointer-events: none; }
+.activity-day:hover .activity-tooltip, .activity-day:focus .activity-tooltip { display: block; }
+.activity-week:nth-last-child(-n+14) .activity-tooltip { left: auto; right: 0; }
+.activity-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 11px; color: #666; }

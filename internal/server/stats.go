@@ -42,6 +42,7 @@ func (row *statsRow) add(s store.Session) {
 }
 
 type statsData struct {
+	Heatmaps                                               []activityHeatmap
 	PageTitle, Group, AgentFilter, ProjectFilter, From, To string
 	Projects                                               []string
 	Total                                                  statsRow
@@ -137,6 +138,25 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(d.Projects)
 	d.Total, d.Periods, d.ByAgent = aggregateStats(filtered, d.Group)
+	byYear := map[int][]store.Session{}
+	for _, session := range filtered {
+		date := session.Started
+		if date.IsZero() {
+			date = session.Modified
+		}
+		if !date.IsZero() {
+			year := date.UTC().Year()
+			byYear[year] = append(byYear[year], session)
+		}
+	}
+	var years []int
+	for year := range byYear {
+		years = append(years, year)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(years)))
+	for _, year := range years {
+		d.Heatmaps = append(d.Heatmaps, buildHeatmap(byYear[year], year))
+	}
 	if err := statsTmpl.ExecuteTemplate(w, "stats.html", d); err != nil {
 		http.Error(w, err.Error(), 500)
 	}

@@ -75,3 +75,8 @@ Metrics include sessions, agent types, projects, transcript records, token usage
 (input, output, cache reads/writes), and elapsed session duration.
 Sessions are assigned to their start date in UTC, falling back to file modification
 time when unavailable. Token coverage is shown because some transcripts omit usage.
+
+Daily activity heatmaps show session counts for every year with matching data,
+newest first, with
+per-day session, token, and agent totals on hover or keyboard focus. It respects
+the stats filters and uses UTC session start dates.
