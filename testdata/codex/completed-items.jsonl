@@ -1,0 +1,9 @@
+{"timestamp":"2026-09-11T08:14:57Z","type":"session_meta","payload":{"cwd":"/Users/test/myproject"}}
+{"timestamp":"2026-09-11T08:14:58Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"injected environment context"}]}}
+{"timestamp":"2026-09-11T08:14:59Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"review the cutover script"}]}}
+{"timestamp":"2026-09-11T08:14:59Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","id":"user-1","content":[{"type":"text","text":"review the cutover script"}]}}}
+{"timestamp":"2026-09-11T08:15:00Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","id":"msg-1","content":[{"type":"Text","text":"I will trace the script."}],"phase":"commentary"}}}
+{"timestamp":"2026-09-11T08:15:00Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will trace the script."}]}}
+{"timestamp":"2026-09-11T08:15:01Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"const r = await tools.exec_command({cmd: 'pwd'}); text(r);","call_id":"call-1"}}
+{"timestamp":"2026-09-11T08:15:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-1","output":[{"type":"input_text","text":"Script completed\nOutput:\n"},{"type":"input_image","image_url":"data:image/png;base64,AA=="},{"type":"input_text","text":"/Users/test/myproject"}]}}
+{"timestamp":"2026-09-11T08:15:03Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Reasoning","summary_text":[]}}}

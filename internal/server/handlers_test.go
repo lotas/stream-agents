@@ -173,3 +173,33 @@ func TestSessionPageHasStatsIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleCodexCompletedItems(t *testing.T) {
+	root := t.TempDir()
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "codex", "completed-items.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "01a08f88-b845-7c61-9464-dfc0118e264c"
+	if err := os.WriteFile(filepath.Join(root, "rollout-2026-09-11T08-14-57-"+id+".jsonl"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	mux := server.NewMux(store.NewIndex(store.NewCodexStore(root)))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("GET", "/session/codex/"+id, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, text := range []string{"review the cutover script", "I will trace the script.", "tool-call-1", "exec", "/Users/test/myproject"} {
+		if !strings.Contains(body, text) {
+			t.Errorf("transcript missing %q", text)
+		}
+	}
+	if strings.Count(body, "I will trace the script.") != 1 {
+		t.Error("assistant message duplicated")
+	}
+	if strings.Contains(body, "injected environment context") {
+		t.Error("injected context rendered as user turn")
+	}
+}

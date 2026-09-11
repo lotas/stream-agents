@@ -144,17 +144,16 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			json.Unmarshal(line.Payload, &meta)
 			sess.Project = meta.CWD
 		}
-		if line.Type == "event_msg" && sess.Title == "" {
-			var payload struct {
-				Type    string `json:"type"`
-				Message string `json:"message"`
-			}
-			if err := json.Unmarshal(line.Payload, &payload); err == nil && payload.Type == "user_message" {
-				t := payload.Message
-				if runes := []rune(t); len(runes) > 120 {
-					t = string(runes[:120]) + "…"
+		if sess.Title == "" {
+			for _, msg := range ParseCodexJSONLLine(scanner.Bytes()) {
+				if msg.Role == "user" {
+					t := msg.Text
+					if runes := []rune(t); len(runes) > 120 {
+						t = string(runes[:120]) + "…"
+					}
+					sess.Title = t
+					break
 				}
-				sess.Title = t
 			}
 		}
 	}
@@ -200,11 +199,28 @@ func ParseCodexJSONLLine(data []byte) []Message {
 		var payload struct {
 			Type    string `json:"type"`
 			Message string `json:"message"`
+			Item    struct {
+				Type    string          `json:"type"`
+				Content json.RawMessage `json:"content"`
+			} `json:"item"`
 		}
 		if json.Unmarshal(line.Payload, &payload) != nil {
 			return nil
 		}
 		switch payload.Type {
+		case "item_completed":
+			// Use completed conversation events, not response_item messages:
+			// rollouts contain both, and response items also include injected context.
+			var role string
+			switch payload.Item.Type {
+			case "UserMessage":
+				role = "user"
+			case "AgentMessage":
+				role = "assistant"
+			default:
+				return nil
+			}
+			return []Message{{Role: role, Text: codexContentText(payload.Item.Content), Time: line.Timestamp}}
 		case "user_message":
 			return []Message{{Role: "user", Text: payload.Message, Time: line.Timestamp}}
 		case "agent_message":
@@ -212,25 +228,29 @@ func ParseCodexJSONLLine(data []byte) []Message {
 		}
 	case "response_item":
 		var payload struct {
-			Type      string `json:"type"`
-			Name      string `json:"name"`
-			Arguments string `json:"arguments"`
-			CallID    string `json:"call_id"`
-			Output    string `json:"output"`
+			Type      string          `json:"type"`
+			Name      string          `json:"name"`
+			Arguments string          `json:"arguments"`
+			CallID    string          `json:"call_id"`
+			Output    json.RawMessage `json:"output"`
+			Input     string          `json:"input"`
 		}
 		if json.Unmarshal(line.Payload, &payload) != nil {
 			return nil
 		}
 		switch payload.Type {
-		case "function_call":
+		case "function_call", "custom_tool_call":
 			args := payload.Arguments
+			if payload.Type == "custom_tool_call" {
+				args = payload.Input
+			}
 			if len(args) > 200 {
 				args = args[:200] + "…"
 			}
 			meta := map[string]any{"name": payload.Name, "call_id": payload.CallID, "input": args}
 			return []Message{{Role: "tool_call", Text: payload.Name, Meta: meta, Time: line.Timestamp}}
-		case "function_call_output":
-			out := payload.Output
+		case "function_call_output", "custom_tool_call_output":
+			out := codexContentText(payload.Output)
 			if idx := strings.Index(out, "\nOutput:\n"); idx >= 0 {
 				out = out[idx+len("\nOutput:\n"):]
 			}
@@ -239,4 +259,28 @@ func ParseCodexJSONLLine(data []byte) []Message {
 		}
 	}
 	return nil
+}
+
+// codexContentText accepts legacy string outputs and multimodal content arrays.
+// Non-text blocks (such as images) do not prevent adjacent text from rendering.
+func codexContentText(data json.RawMessage) string {
+	var text string
+	if json.Unmarshal(data, &text) == nil {
+		return text
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(data, &blocks) != nil {
+		return ""
+	}
+	var parts []string
+	for _, block := range blocks {
+		switch block.Type {
+		case "text", "Text", "input_text", "output_text":
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
