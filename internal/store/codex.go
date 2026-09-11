@@ -137,6 +137,29 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			}
 			lastTime = line.Timestamp
 		}
+		if line.Type == "event_msg" {
+			var event struct {
+				Type string `json:"type"`
+				Info struct {
+					Total *struct {
+						Input  int `json:"input_tokens"`
+						Output int `json:"output_tokens"`
+						Cached int `json:"cached_input_tokens"`
+					} `json:"total_token_usage"`
+				} `json:"info"`
+			}
+			if json.Unmarshal(line.Payload, &event) == nil && event.Type == "token_count" && event.Info.Total != nil {
+				// Codex reports cumulative totals; repeated events must not be summed.
+				u := event.Info.Total
+				sess.HasTokens = true
+				sess.InputTokens = u.Input - u.Cached
+				if sess.InputTokens < 0 {
+					sess.InputTokens = 0
+				}
+				sess.OutputTokens = u.Output
+				sess.CacheReadTokens = u.Cached
+			}
+		}
 		if line.Type == "session_meta" {
 			var meta struct {
 				CWD string `json:"cwd"`
@@ -157,6 +180,7 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			}
 		}
 	}
+	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {
 		sess.Duration = lastTime.Sub(firstTime)

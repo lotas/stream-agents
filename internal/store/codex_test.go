@@ -128,3 +128,20 @@ func TestCodexFunctionOutputContentArray(t *testing.T) {
 		t.Fatalf("messages = %+v", msgs)
 	}
 }
+
+func TestCodexCumulativeStats(t *testing.T) {
+	root := t.TempDir()
+	event := `{"timestamp":"2026-01-01T00:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":25,"cached_input_tokens":40}}}}` + "\n"
+	path := filepath.Join(root, "rollout-2026-01-01T00-00-00-test.jsonl")
+	if err := os.WriteFile(path, []byte(event+event), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := store.NewCodexStore(root).ListSessions(context.Background())
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions: %v %v", sessions, err)
+	}
+	s := sessions[0]
+	if !s.HasTokens || s.InputTokens != 60 || s.OutputTokens != 25 || s.CacheReadTokens != 40 || s.Started.Year() != 2026 {
+		t.Fatalf("incorrect usage: %+v", s)
+	}
+}

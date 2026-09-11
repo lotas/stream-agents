@@ -169,9 +169,12 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 						InputTokens         int `json:"input_tokens"`
 						OutputTokens        int `json:"output_tokens"`
 						CacheReadTokens     int `json:"cache_read_input_tokens"`
+						CacheCreationTokens int `json:"cache_creation_input_tokens"`
 					} `json:"usage"`
 				}
 				if json.Unmarshal(msgRaw, &msg) == nil && msg.Usage != nil {
+					sess.HasTokens = true
+					sess.CacheCreationTokens += msg.Usage.CacheCreationTokens
 					sess.InputTokens += msg.Usage.InputTokens
 					sess.OutputTokens += msg.Usage.OutputTokens
 					sess.CacheReadTokens += msg.Usage.CacheReadTokens
@@ -179,6 +182,7 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 			}
 		}
 	}
+	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {
 		sess.Duration = lastTime.Sub(firstTime)

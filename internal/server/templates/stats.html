@@ -1,0 +1,35 @@
+{{template "layout.html" .}}
+{{define "content"}}
+<h1>Stats</h1>
+<p class="stats-note">Sessions and their usage are grouped by session start date in UTC (file modification date when unavailable). Sessions spanning multiple days count toward their starting period.</p>
+<form class="filters" action="/stats" method="get">
+  <label>Group by<select name="group"><option value="year" {{if eq .Group "year"}}selected{{end}}>Year</option><option value="month" {{if eq .Group "month"}}selected{{end}}>Month</option><option value="day" {{if eq .Group "day"}}selected{{end}}>Day</option></select></label>
+  <label>Agent<select name="agent"><option value="">All agents</option><option value="claude" {{if eq .AgentFilter "claude"}}selected{{end}}>Claude</option><option value="codex" {{if eq .AgentFilter "codex"}}selected{{end}}>Codex</option></select></label>
+  <label>Project<select name="project"><option value="">All projects</option>{{range .Projects}}<option value="{{.}}" {{if eq $.ProjectFilter .}}selected{{end}}>{{shortPath .}}</option>{{end}}</select></label>
+  <label>From<input type="date" name="from" value="{{.From}}"></label>
+  <label>Through<input type="date" name="to" value="{{.To}}"></label>
+  <button class="chip" type="submit">Apply</button><a class="chip" href="/stats">Reset</a>
+</form>
+<div class="stats-cards">
+  <div><span>Sessions</span><strong>{{template "stats-number" .Total.Sessions}}</strong></div>
+  <div><span>Tokens</span><strong>{{template "stats-number" .Total.Tokens}}</strong></div>
+  <div><span>Agent types</span><strong>{{template "stats-number" .Total.Agents}}</strong></div>
+  <div><span>Projects</span><strong>{{template "stats-number" .Total.Projects}}</strong></div>
+  <div><span>Total session duration</span><strong>{{fmtDuration .Total.Duration}}</strong></div>
+</div>
+<p class="stats-note">Token usage available for {{template "stats-number" .Total.WithTokens}} of {{template "stats-number" .Total.Sessions}} sessions. Total tokens include uncached input, output, cache reads, and cache writes. Missing usage is excluded. Duration is elapsed session time, including idle time; records are transcript log entries.</p>
+{{if .Periods}}
+<h2>By {{.Group}}</h2>
+{{template "stats-table" .Periods}}
+<h2>By agent</h2>
+{{template "stats-table" .ByAgent}}
+{{else}}<p class="stats-empty">No sessions match these filters.</p>{{end}}
+{{end}}
+{{define "stats-table"}}
+<div class="table-wrap"><table class="session-list stats-table">
+<thead><tr><th scope="col">Period / agent</th><th scope="col">Sessions</th><th scope="col">Agent types</th><th scope="col">Projects</th><th scope="col">Records</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Cache reads</th><th scope="col">Cache writes</th><th scope="col">Total tokens</th><th scope="col">Duration</th></tr></thead>
+<tbody>{{range .}}<tr><th scope="row">{{.Label}}</th><td>{{template "stats-number" .Sessions}}</td><td>{{template "stats-number" .Agents}}</td><td>{{template "stats-number" .Projects}}</td><td>{{template "stats-number" .Records}}</td><td>{{template "stats-number" .Input}}</td><td>{{template "stats-number" .Output}}</td><td>{{template "stats-number" .CacheRead}}</td><td>{{template "stats-number" .CacheWrite}}</td><td>{{template "stats-number" .Tokens}}</td><td>{{fmtDuration .Duration}}</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "stats-number"}}<span data-compact-number="{{.}}">{{.}}</span>{{end}}

@@ -7,16 +7,19 @@ import (
 )
 
 type Session struct {
-	Agent           string
-	ID              string
-	Project         string
-	Title           string
-	Modified        time.Time
-	MessageCount    int
-	Duration        time.Duration
-	InputTokens     int
-	OutputTokens    int
-	CacheReadTokens int
+	Agent               string
+	ID                  string
+	Project             string
+	Title               string
+	Started             time.Time
+	HasTokens           bool
+	CacheCreationTokens int
+	Modified            time.Time
+	MessageCount        int
+	Duration            time.Duration
+	InputTokens         int
+	OutputTokens        int
+	CacheReadTokens     int
 }
 
 type TokenUsage struct {

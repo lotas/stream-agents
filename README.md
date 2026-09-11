@@ -66,3 +66,12 @@ Project layout:
 - `internal/store`: Claude/Codex transcript discovery and parsing
 - `internal/server`: routes, templates, and static assets
 - `internal/render`: Markdown rendering
+
+## Stats
+
+Open **Stats** in the navigation (at `/stats`) for year, month, or day summaries
+and an agent breakdown. Filter by project, agent, and inclusive date range.
+Metrics include sessions, agent types, projects, transcript records, token usage
+(input, output, cache reads/writes), and elapsed session duration.
+Sessions are assigned to their start date in UTC, falling back to file modification
+time when unavailable. Token coverage is shown because some transcripts omit usage.

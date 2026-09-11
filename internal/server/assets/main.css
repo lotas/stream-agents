@@ -426,3 +426,20 @@ body.hide-assistant .msg-assistant { display: none; }
   align-self: flex-start;
 }
 .notify-close:hover { color: #1a1a1a; }
+
+/* Statistics */
+header { display: flex; align-items: center; gap: 2rem; }
+header nav { display: flex; gap: 1rem; }
+header nav a { color: #eee; font-size: 0.9rem; text-decoration: none; }
+header nav a:hover { text-decoration: underline; }
+.stats-note { color: #666; font-size: 0.85rem; line-height: 1.6; max-width: 1000px; }
+.stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; }
+.stats-cards > div { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; }
+.stats-cards span { display: block; color: #666; font-size: 0.85rem; }
+.stats-cards strong { display: block; margin-top: 0.5rem; font-size: 1.5rem; overflow-wrap: anywhere; }
+.stats-table { table-layout: auto; }
+.stats-table th, .stats-table td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stats-table tbody th { background: #fff; border-top: 1px solid #eee; }
+.filters input[type="date"] { padding: 0.35rem; border: 1px solid #ccc; border-radius: 4px; }
+.filters select[name="project"] { max-width: min(350px, 80vw); }
+.stats-empty { padding: 2rem; text-align: center; background: #fff; border-radius: 6px; }

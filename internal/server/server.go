@@ -24,6 +24,7 @@ func NewMux(idx *store.Index) http.Handler {
 	mux.HandleFunc("/stream/{agent}/{id}", h.handleStream)
 	mux.HandleFunc("/notify", h.handleNotify)
 	mux.HandleFunc("/hot.json", h.handleHotJSON)
+	mux.HandleFunc("/stats", h.handleStats)
 	mux.HandleFunc("/", h.handleList)
 	return mux
 }

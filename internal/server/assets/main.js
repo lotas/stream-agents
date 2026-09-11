@@ -1,4 +1,18 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // Compact stats counts, retaining a localized exact value for hover and assistive technology.
+  const compactNumber = new Intl.NumberFormat(undefined, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+  const exactNumber = new Intl.NumberFormat();
+  document.querySelectorAll('[data-compact-number]').forEach(el => {
+    const value = Number(el.dataset.compactNumber);
+    if (!Number.isFinite(value)) return;
+    el.textContent = compactNumber.format(value);
+    el.title = exactNumber.format(value);
+    el.setAttribute('aria-label', el.title);
+  });
+
   // ── List page: project select navigates to a server-rendered URL ────────
   const projectSel = document.getElementById('project-filter');
   if (projectSel) {
