@@ -15,6 +15,8 @@ type statsRow struct {
 	Label                                                                                         string
 	Sessions, Agents, Projects, Records, Input, Output, CacheRead, CacheWrite, Tokens, WithTokens int
 	Duration                                                                                      time.Duration
+	ActiveDuration                                                                                time.Duration
+	activity                                                                                      []store.Interval
 	agents, projects                                                                              map[string]bool
 }
 
@@ -45,11 +47,16 @@ type statsData struct {
 	Heatmaps                                               []activityHeatmap
 	PageTitle, Group, AgentFilter, ProjectFilter, From, To string
 	Projects                                               []string
+	IdleCutoff                                             string
 	Total                                                  statsRow
 	Periods, ByAgent                                       []*statsRow
 }
 
-func aggregateStats(sessions []store.Session, group string) (statsRow, []*statsRow, []*statsRow) {
+func aggregateStats(sessions []store.Session, group string, bounds ...time.Time) (statsRow, []*statsRow, []*statsRow) {
+	var from, to time.Time
+	if len(bounds) == 2 {
+		from, to = bounds[0], bounds[1]
+	}
 	var total statsRow
 	periods, agents := map[string]*statsRow{}, map[string]*statsRow{}
 	layout := map[string]string{"year": "2006", "month": "2006-01", "day": "2006-01-02"}[group]
@@ -58,26 +65,58 @@ func aggregateStats(sessions []store.Session, group string) (statsRow, []*statsR
 		if date.IsZero() {
 			date = s.Modified
 		}
-		label := date.UTC().Format(layout)
-		if periods[label] == nil {
-			periods[label] = &statsRow{Label: label}
-		}
 		if agents[s.Agent] == nil {
 			agents[s.Agent] = &statsRow{Label: s.Agent}
 		}
-		total.add(s)
-		periods[label].add(s)
-		agents[s.Agent].add(s)
+		if (from.IsZero() || !date.Before(from)) && (to.IsZero() || date.Before(to)) {
+			label := date.UTC().Format(layout)
+			if periods[label] == nil {
+				periods[label] = &statsRow{Label: label}
+			}
+			total.add(s)
+			periods[label].add(s)
+			agents[s.Agent].add(s)
+		}
+		for _, span := range s.Activity {
+			if !from.IsZero() && span.Start.Before(from) {
+				span.Start = from
+			}
+			if !to.IsZero() && span.End.After(to) {
+				span.End = to
+			}
+			if !span.End.After(span.Start) {
+				continue
+			}
+			total.activity = append(total.activity, span)
+			agents[s.Agent].activity = append(agents[s.Agent].activity, span)
+			for start := span.Start.UTC(); start.Before(span.End); {
+				end := time.Date(start.Year(), start.Month(), start.Day()+1, 0, 0, 0, 0, time.UTC)
+				if end.After(span.End) {
+					end = span.End
+				}
+				label := start.Format(layout)
+				if periods[label] == nil {
+					periods[label] = &statsRow{Label: label}
+				}
+				periods[label].activity = append(periods[label].activity, store.Interval{Start: start, End: end})
+				start = end
+			}
+		}
 	}
 	var rows, byAgent []*statsRow
 	for _, row := range periods {
+		row.ActiveDuration = store.IntervalDuration(row.activity)
 		rows = append(rows, row)
 	}
 	for _, row := range agents {
-		byAgent = append(byAgent, row)
+		row.ActiveDuration = store.IntervalDuration(row.activity)
+		if row.Sessions > 0 || row.ActiveDuration > 0 {
+			byAgent = append(byAgent, row)
+		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Label > rows[j].Label })
 	sort.Slice(byAgent, func(i, j int) bool { return byAgent[i].Label < byAgent[j].Label })
+	total.ActiveDuration = store.IntervalDuration(total.activity)
 	return total, rows, byAgent
 }
 
@@ -115,8 +154,9 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to list sessions: "+err.Error(), 500)
 		return
 	}
+	d.IdleCutoff = h.idx.IdleCutoff.String()
 	projects := map[string]bool{}
-	var filtered []store.Session
+	var filtered, matching []store.Session
 	for _, s := range sessions {
 		if s.Project != "" {
 			projects[s.Project] = true
@@ -124,6 +164,7 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		if d.AgentFilter != "" && s.Agent != d.AgentFilter || d.ProjectFilter != "" && s.Project != d.ProjectFilter {
 			continue
 		}
+		matching = append(matching, s)
 		date := s.Started
 		if date.IsZero() {
 			date = s.Modified
@@ -137,7 +178,11 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		d.Projects = append(d.Projects, project)
 	}
 	sort.Strings(d.Projects)
-	d.Total, d.Periods, d.ByAgent = aggregateStats(filtered, d.Group)
+	var end time.Time
+	if !to.IsZero() {
+		end = to.AddDate(0, 0, 1)
+	}
+	d.Total, d.Periods, d.ByAgent = aggregateStats(matching, d.Group, from, end)
 	byYear := map[int][]store.Session{}
 	for _, session := range filtered {
 		date := session.Started

@@ -61,3 +61,44 @@ func TestStatsPage(t *testing.T) {
 		}
 	}
 }
+
+func TestActiveStatsOverlapAndDateClipping(t *testing.T) {
+	midnight := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	sessions := []store.Session{
+		{Agent: "claude", Started: midnight.Add(-24 * time.Hour), Activity: []store.Interval{{Start: midnight.Add(-10 * time.Minute), End: midnight.Add(10 * time.Minute)}}},
+		{Agent: "codex", Started: midnight, Activity: []store.Interval{{Start: midnight, End: midnight.Add(20 * time.Minute)}}},
+	}
+	total, rows, agents := aggregateStats(sessions, "day")
+	if total.ActiveDuration != 30*time.Minute || len(rows) != 2 || rows[0].ActiveDuration != 20*time.Minute || rows[1].ActiveDuration != 10*time.Minute {
+		t.Fatalf("incorrect union/split: %+v %+v", total, rows)
+	}
+	if agents[0].ActiveDuration != 20*time.Minute || agents[1].ActiveDuration != 20*time.Minute {
+		t.Fatal("agent rows should retain their overlapping time")
+	}
+	total, rows, _ = aggregateStats(sessions, "month", midnight, midnight.Add(24*time.Hour))
+	if total.Sessions != 1 || total.ActiveDuration != 20*time.Minute || len(rows) != 1 || rows[0].Label != "2026-02" {
+		t.Fatalf("incorrect clipped stats: %+v %+v", total, rows)
+	}
+	// An older resumed chat alone must still appear within the selected range.
+	total, rows, _ = aggregateStats(sessions[:1], "day", midnight, midnight.Add(24*time.Hour))
+	if total.Sessions != 0 || total.ActiveDuration != 10*time.Minute || len(rows) != 1 {
+		t.Fatalf("resumed activity lost: %+v", total)
+	}
+}
+
+func TestActiveTimePages(t *testing.T) {
+	start := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	idx := store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Started: start, ActivityTimes: []time.Time{start, start.Add(10 * time.Minute)}}}})
+	for _, path := range []string{"/?date=all", "/stats"} {
+		w := httptest.NewRecorder()
+		NewMux(idx).ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "Active time (est.)") || !strings.Contains(w.Body.String(), "10m 0s") {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+	idx.IdleCutoff = 5 * time.Minute
+	sessions, err := idx.ListAll(context.Background(), "", "")
+	if err != nil || sessions[0].ActiveDuration != 0 {
+		t.Fatal("configured cutoff not applied", err)
+	}
+}

@@ -48,6 +48,7 @@ type handlers struct {
 }
 
 type listData struct {
+	IdleCutoff    string
 	PageTitle     string
 	Sessions      []store.Session
 	Projects      []string
@@ -136,6 +137,7 @@ func (h *handlers) handleList(w http.ResponseWriter, r *http.Request) {
 
 	data := listData{
 		PageTitle:     "Sessions — stream-agents",
+		IdleCutoff:    h.idx.IdleCutoff.String(),
 		Sessions:      sessions,
 		Projects:      h.idx.Projects(),
 		AgentFilter:   agentFilter,

@@ -17,6 +17,9 @@ type Session struct {
 	Modified            time.Time
 	MessageCount        int
 	Duration            time.Duration
+	ActivityTimes       []time.Time
+	Activity            []Interval
+	ActiveDuration      time.Duration
 	InputTokens         int
 	OutputTokens        int
 	CacheReadTokens     int

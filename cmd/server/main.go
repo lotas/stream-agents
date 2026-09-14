@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"stream-agents/internal/server"
 	"stream-agents/internal/store"
@@ -19,13 +20,18 @@ func main() {
 	claudeDir := flag.String("claude-dir", filepath.Join(home, ".claude", "projects"), "Claude projects directory (~/.claude/projects)")
 	claudeConfigDir := flag.String("claude-config-dir", filepath.Join(home, ".config", "claude", "projects"), "Claude projects directory (~/.config/claude/projects)")
 	codexDir := flag.String("codex-dir", filepath.Join(home, ".codex", "sessions"), "Codex sessions directory")
+	idleCutoff := flag.Duration("idle-cutoff", 15*time.Minute, "maximum gap between events counted as active time")
 	flag.Parse()
+	if *idleCutoff <= 0 {
+		log.Fatal("idle-cutoff must be positive")
+	}
 
 	idx := store.NewIndex(
 		store.NewClaudeStore(*claudeDir, *claudeConfigDir),
 		store.NewCodexStore(*codexDir),
 	)
 
+	idx.IdleCutoff = *idleCutoff
 	mux := server.NewMux(idx)
 
 	fmt.Printf("stream-agents listening on http://%s\n", *addr)

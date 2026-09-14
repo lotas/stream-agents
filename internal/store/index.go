@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 )
 
 // Index aggregates multiple stores and provides filtered session listing.
 type Index struct {
-	stores []Store
+	stores     []Store
+	IdleCutoff time.Duration
 }
 
 func NewIndex(stores ...Store) *Index {
-	return &Index{stores: stores}
+	return &Index{stores: stores, IdleCutoff: 15 * time.Minute}
 }
 
 // ListAll refreshes all stores and returns a combined, sorted session list.
@@ -30,6 +32,10 @@ func (idx *Index) ListAll(ctx context.Context, agentFilter, projectFilter string
 		for _, sess := range sessions {
 			if projectFilter != "" && sess.Project != projectFilter {
 				continue
+			}
+			if len(sess.ActivityTimes) > 0 {
+				sess.Activity = ActivityIntervals(sess.ActivityTimes, idx.IdleCutoff)
+				sess.ActiveDuration = IntervalDuration(sess.Activity)
 			}
 			all = append(all, sess)
 		}

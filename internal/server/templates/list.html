@@ -22,6 +22,7 @@
     <a class="chip" href="{{.URL "date" "all"}}"       {{if eq .DateFilter "all"}}aria-pressed="true"{{end}}>All time</a>
   </div>
 </section>
+<p class="stats-note">Active time estimates transcript activity, including agent work. Gaps longer than {{.IdleCutoff}} are excluded; isolated events contribute zero. Per-chat times may overlap.</p>
 <div class="table-wrap">
 <table class="session-list">
   <colgroup>
@@ -29,11 +30,12 @@
     <col class="col-project">
     <col class="col-title">
     <col class="col-duration">
+    <col class="col-duration">
     <col class="col-tokens">
     <col class="col-mtime">
   </colgroup>
   <thead>
-    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Duration</th><th>Tokens</th><th>Modified</th></tr>
+    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Chat duration</th><th>Active time (est.)</th><th>Tokens</th><th>Modified</th></tr>
   </thead>
   <tbody>
     {{range .Sessions}}
@@ -42,6 +44,7 @@
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
       <td><div class="title-wrap">{{if isHot .Modified}}<span class="hot-dot" title="Active in the last 10 minutes"></span>{{end}}<a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></div></td>
       <td class="stat-cell">{{if .Duration}}{{fmtDuration .Duration}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
+      <td class="stat-cell">{{fmtDuration .ActiveDuration}}</td>
       <td class="stat-cell">{{if .InputTokens}}{{fmtTokens .InputTokens}}<span class="tok-sep">/</span>{{fmtTokens .OutputTokens}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="mtime">{{.Modified.Format "2006-01-02 15:04"}}</td>
     </tr>

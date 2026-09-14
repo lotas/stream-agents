@@ -143,6 +143,7 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 					firstTime = ts
 				}
 				lastTime = ts
+				sess.ActivityTimes = append(sess.ActivityTimes, ts)
 			}
 		}
 		if typ == "user" && sess.Project == ClaudeDecodeProject(dirName) {

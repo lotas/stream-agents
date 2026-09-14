@@ -52,6 +52,9 @@ func TestClaudeListSessions(t *testing.T) {
 		t.Fatalf("expected 1 session, got %d", len(sessions))
 	}
 	s := sessions[0]
+	if len(s.ActivityTimes) < 2 {
+		t.Fatal("missing activity timestamps")
+	}
 	if s.Agent != "claude" {
 		t.Errorf("Agent = %q, want claude", s.Agent)
 	}

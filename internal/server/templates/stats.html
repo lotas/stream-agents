@@ -15,9 +15,11 @@
   <div><span>Tokens</span><strong>{{template "stats-number" .Total.Tokens}}</strong></div>
   <div><span>Agent types</span><strong>{{template "stats-number" .Total.Agents}}</strong></div>
   <div><span>Projects</span><strong>{{template "stats-number" .Total.Projects}}</strong></div>
-  <div><span>Total session duration</span><strong>{{fmtDuration .Total.Duration}}</strong></div>
+  <div><span>Total chat duration</span><strong>{{fmtDuration .Total.Duration}}</strong></div>
+  <div><span>Active time (est.)</span><strong>{{fmtDuration .Total.ActiveDuration}}</strong></div>
 </div>
 <p class="stats-note">Token usage available for {{template "stats-number" .Total.WithTokens}} of {{template "stats-number" .Total.Sessions}} sessions. Total tokens include uncached input, output, cache reads, and cache writes. Missing usage is excluded. Duration is elapsed session time, including idle time; records are transcript log entries.</p>
+<p class="stats-note">Active time estimates transcript activity, including agent work, excluding gaps longer than {{.IdleCutoff}}. Overlaps count once within each row and the total; agent rows may overlap. Activity is split at midnight UTC and clipped to the selected dates, including resumed older chats. Isolated events contribute zero. This does not measure human attention.</p>
 {{range .Heatmaps}}
 <section class="activity" aria-labelledby="activity-title-{{.Year}}">
 <h2 id="activity-title-{{.Year}}">Daily activity · {{.Year}}</h2>
@@ -40,8 +42,8 @@
 {{end}}
 {{define "stats-table"}}
 <div class="table-wrap"><table class="session-list stats-table">
-<thead><tr><th scope="col">Period / agent</th><th scope="col">Sessions</th><th scope="col">Agent types</th><th scope="col">Projects</th><th scope="col">Records</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Cache reads</th><th scope="col">Cache writes</th><th scope="col">Total tokens</th><th scope="col">Duration</th></tr></thead>
-<tbody>{{range .}}<tr><th scope="row">{{.Label}}</th><td>{{template "stats-number" .Sessions}}</td><td>{{template "stats-number" .Agents}}</td><td>{{template "stats-number" .Projects}}</td><td>{{template "stats-number" .Records}}</td><td>{{template "stats-number" .Input}}</td><td>{{template "stats-number" .Output}}</td><td>{{template "stats-number" .CacheRead}}</td><td>{{template "stats-number" .CacheWrite}}</td><td>{{template "stats-number" .Tokens}}</td><td>{{fmtDuration .Duration}}</td></tr>{{end}}</tbody>
+<thead><tr><th scope="col">Period / agent</th><th scope="col">Sessions</th><th scope="col">Agent types</th><th scope="col">Projects</th><th scope="col">Records</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Cache reads</th><th scope="col">Cache writes</th><th scope="col">Total tokens</th><th scope="col">Chat duration</th><th scope="col">Active time (est.)</th></tr></thead>
+<tbody>{{range .}}<tr><th scope="row">{{.Label}}</th><td>{{template "stats-number" .Sessions}}</td><td>{{template "stats-number" .Agents}}</td><td>{{template "stats-number" .Projects}}</td><td>{{template "stats-number" .Records}}</td><td>{{template "stats-number" .Input}}</td><td>{{template "stats-number" .Output}}</td><td>{{template "stats-number" .CacheRead}}</td><td>{{template "stats-number" .CacheWrite}}</td><td>{{template "stats-number" .Tokens}}</td><td>{{fmtDuration .Duration}}</td><td>{{fmtDuration .ActiveDuration}}</td></tr>{{end}}</tbody>
 </table></div>
 {{end}}
 

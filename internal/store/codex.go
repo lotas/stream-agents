@@ -136,6 +136,7 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 				firstTime = line.Timestamp
 			}
 			lastTime = line.Timestamp
+			sess.ActivityTimes = append(sess.ActivityTimes, line.Timestamp)
 		}
 		if line.Type == "event_msg" {
 			var event struct {

@@ -80,3 +80,15 @@ Daily activity heatmaps show session counts for every year with matching data,
 newest first, with
 per-day session, token, and agent totals on hover or keyboard focus. It respects
 the stats filters and uses UTC session start dates.
+
+Both the chat list and Stats show **Active time (est.)** alongside chat duration.
+Active time connects consecutive transcript timestamps when their gap is at most
+15 minutes; longer gaps and isolated events contribute zero. This includes agent
+work and does not measure human attention. Stats merge overlapping activity across
+matching chats, so per-chat and per-agent values need not sum to the overall total.
+Activity is split at midnight UTC and clipped to date filters, including activity
+from older resumed sessions. Session counts, tokens, and chat duration retain their
+session-start grouping.
+
+Set the idle cutoff at startup, for example `go run ./cmd/server -idle-cutoff 10m`.
+The cutoff must be positive. Historical transcripts are recalculated automatically.
