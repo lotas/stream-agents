@@ -126,6 +126,8 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	count := 0
 	var firstTime, lastTime time.Time
+	var models []string
+	modelSeen := make(map[string]bool)
 	for scanner.Scan() {
 		count++
 		var raw map[string]json.RawMessage
@@ -166,6 +168,7 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 		if typ == "assistant" {
 			if msgRaw, ok := raw["message"]; ok {
 				var msg struct {
+					Model string `json:"model"`
 					Usage *struct {
 						InputTokens         int `json:"input_tokens"`
 						OutputTokens        int `json:"output_tokens"`
@@ -173,16 +176,34 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 						CacheCreationTokens int `json:"cache_creation_input_tokens"`
 					} `json:"usage"`
 				}
-				if json.Unmarshal(msgRaw, &msg) == nil && msg.Usage != nil {
+				if json.Unmarshal(msgRaw, &msg) == nil {
+					if msg.Model != "" && !modelSeen[msg.Model] {
+						modelSeen[msg.Model] = true
+						models = append(models, msg.Model)
+					}
+					if msg.Usage == nil {
+						continue
+					}
 					sess.HasTokens = true
 					sess.CacheCreationTokens += msg.Usage.CacheCreationTokens
 					sess.InputTokens += msg.Usage.InputTokens
 					sess.OutputTokens += msg.Usage.OutputTokens
 					sess.CacheReadTokens += msg.Usage.CacheReadTokens
+					usage := TokenUsage{
+						InputTokens:         msg.Usage.InputTokens,
+						OutputTokens:        msg.Usage.OutputTokens,
+						CacheCreationTokens: msg.Usage.CacheCreationTokens,
+						CacheReadTokens:     msg.Usage.CacheReadTokens,
+					}
+					if cost, ok := estimateModelCost(msg.Model, usage); ok {
+						sess.HasCost = true
+						sess.Cost += cost
+					}
 				}
 			}
 		}
 	}
+	sess.Model = strings.Join(models, ", ")
 	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {
@@ -317,6 +338,7 @@ func claudeParseAssistantMsg(raw map[string]json.RawMessage, ts time.Time) []Mes
 		return nil
 	}
 	var msg struct {
+		Model   string            `json:"model"`
 		Content []json.RawMessage `json:"content"`
 		Usage   *struct {
 			InputTokens         int `json:"input_tokens"`
@@ -371,6 +393,9 @@ func claudeParseAssistantMsg(raw map[string]json.RawMessage, ts time.Time) []Mes
 			}
 		}
 		out[idx].Usage = u
+		if cost, ok := estimateModelCost(msg.Model, *u); ok {
+			out[idx].Cost = &cost
+		}
 	}
 	return out
 }

@@ -128,3 +128,28 @@ func TestClaudeFilePath(t *testing.T) {
 		t.Error("expected empty string for unknown id")
 	}
 }
+
+func TestClaudeEstimatedCost(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(root, "-Users-test-project")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"assistant","timestamp":"2026-09-18T12:00:00Z","message":{"role":"assistant","model":"claude-opus-5","content":[{"type":"text","text":"first"}],"usage":{"input_tokens":1000000,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}` + "\n" +
+		`{"type":"assistant","timestamp":"2026-09-18T12:00:01Z","message":{"role":"assistant","model":"claude-fable-5","content":[{"type":"text","text":"second"}],"usage":{"input_tokens":1000000,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(project, "priced-session.jsonl"), []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cs := store.NewClaudeStore(root)
+	sessions, err := cs.ListSessions(context.Background())
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions = %+v, err = %v", sessions, err)
+	}
+	if sessions[0].Model != "claude-opus-5, claude-fable-5" || !sessions[0].HasCost || sessions[0].Cost != 15 {
+		t.Fatalf("priced session = %+v", sessions[0])
+	}
+	msgs, err := cs.LoadSession(context.Background(), "priced-session")
+	if err != nil || len(msgs) != 2 || msgs[0].Cost == nil || *msgs[0].Cost != 5 || msgs[1].Cost == nil || *msgs[1].Cost != 10 {
+		t.Fatalf("priced messages = %+v, err = %v", msgs, err)
+	}
+}

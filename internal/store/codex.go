@@ -18,6 +18,33 @@ type codexEntry struct {
 	session Session
 }
 
+type codexTokenUsage struct {
+	Input     int `json:"input_tokens"`
+	Output    int `json:"output_tokens"`
+	Cached    int `json:"cached_input_tokens"`
+	Reasoning int `json:"reasoning_output_tokens"`
+}
+
+func (u codexTokenUsage) tokenUsage() TokenUsage {
+	input := u.Input - u.Cached
+	if input < 0 {
+		input = 0
+	}
+	return TokenUsage{InputTokens: input, OutputTokens: u.Output, CacheReadTokens: u.Cached}
+}
+
+func (u codexTokenUsage) delta(previous codexTokenUsage) codexTokenUsage {
+	if u.Input < previous.Input || u.Output < previous.Output || u.Cached < previous.Cached {
+		return u
+	}
+	return codexTokenUsage{
+		Input:     u.Input - previous.Input,
+		Output:    u.Output - previous.Output,
+		Cached:    u.Cached - previous.Cached,
+		Reasoning: u.Reasoning - previous.Reasoning,
+	}
+}
+
 // CodexStore scans ~/.codex/sessions/YYYY/MM/DD/ and serves Codex transcripts.
 type CodexStore struct {
 	root  string
@@ -121,6 +148,10 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	count := 0
 	var firstTime, lastTime time.Time
+	var currentModel string
+	var models []string
+	modelSeen := make(map[string]bool)
+	var previousUsage codexTokenUsage
 	for scanner.Scan() {
 		count++
 		var line struct {
@@ -142,23 +173,34 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			var event struct {
 				Type string `json:"type"`
 				Info struct {
-					Total *struct {
-						Input  int `json:"input_tokens"`
-						Output int `json:"output_tokens"`
-						Cached int `json:"cached_input_tokens"`
-					} `json:"total_token_usage"`
+					Total *codexTokenUsage `json:"total_token_usage"`
 				} `json:"info"`
 			}
 			if json.Unmarshal(line.Payload, &event) == nil && event.Type == "token_count" && event.Info.Total != nil {
 				// Codex reports cumulative totals; repeated events must not be summed.
 				u := event.Info.Total
 				sess.HasTokens = true
-				sess.InputTokens = u.Input - u.Cached
-				if sess.InputTokens < 0 {
-					sess.InputTokens = 0
+				total := u.tokenUsage()
+				sess.InputTokens = total.InputTokens
+				sess.OutputTokens = total.OutputTokens
+				sess.CacheReadTokens = total.CacheReadTokens
+				if cost, ok := estimateModelCost(currentModel, u.delta(previousUsage).tokenUsage()); ok {
+					sess.HasCost = true
+					sess.Cost += cost
 				}
-				sess.OutputTokens = u.Output
-				sess.CacheReadTokens = u.Cached
+				previousUsage = *u
+			}
+		}
+		if line.Type == "turn_context" {
+			var turn struct {
+				Model string `json:"model"`
+			}
+			if json.Unmarshal(line.Payload, &turn) == nil && turn.Model != "" {
+				currentModel = turn.Model
+				if !modelSeen[currentModel] {
+					modelSeen[currentModel] = true
+					models = append(models, currentModel)
+				}
 			}
 		}
 		if line.Type == "session_meta" {
@@ -181,6 +223,7 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			}
 		}
 	}
+	sess.Model = strings.Join(models, ", ")
 	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {

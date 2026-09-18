@@ -605,6 +605,10 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	items, turns, toolNames, stats := buildViewItems(msgs)
+	if sess.HasCost {
+		stats.HasCost = true
+		stats.Cost = sess.Cost
+	}
 
 	var streamOffset int64
 	if fpath != "" && time.Since(sess.Modified) < 10*time.Minute {

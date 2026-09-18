@@ -54,6 +54,12 @@ go run ./cmd/server \
 OpenCode rows include the exact provider/model recorded on assistant messages;
 sessions that switched models show each distinct model used.
 
+OpenCode's stored cost is used when available. Claude and Codex costs are rough
+API-equivalent estimates calculated from recorded token usage and a small table
+of current standard model prices. Unknown models show no cost. The estimates do
+not account for historical price changes or fast, batch, regional, and
+long-context pricing modifiers.
+
 The app only reads local transcript storage. Keep the default localhost bind
 unless you are comfortable exposing your agent history on another interface.
 
