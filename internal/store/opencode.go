@@ -133,6 +133,10 @@ func (s *OpenCodeStore) ListSessions(ctx context.Context) ([]Session, error) {
 			sess.CacheReadTokens += data.Tokens.Cache.Read
 			sess.CacheCreationTokens += data.Tokens.Cache.Write
 		}
+		if data.Cost != nil {
+			sess.HasCost = true
+			sess.Cost += *data.Cost
+		}
 		model := data.model()
 		if model != "" {
 			if modelSeen[sessionID] == nil {
@@ -211,6 +215,7 @@ func (s *OpenCodeStore) LoadSession(ctx context.Context, id string) ([]Message, 
 
 	var out []Message
 	usageAttached := make(map[string]bool)
+	costAttached := make(map[string]bool)
 	for rows.Next() {
 		var messageID, messageRaw string
 		var created int64
@@ -239,15 +244,20 @@ func (s *OpenCodeStore) LoadSession(ctx context.Context, id string) ([]Message, 
 			}
 			usageAttached[messageID] = true
 		}
+		if info.Cost != nil && !costAttached[messageID] {
+			parsed[0].Cost = info.Cost
+			costAttached[messageID] = true
+		}
 		out = append(out, parsed...)
 	}
 	return out, rows.Err()
 }
 
 type openCodeMessageData struct {
-	Role       string `json:"role"`
-	ModelID    string `json:"modelID"`
-	ProviderID string `json:"providerID"`
+	Role       string   `json:"role"`
+	ModelID    string   `json:"modelID"`
+	ProviderID string   `json:"providerID"`
+	Cost       *float64 `json:"cost"`
 	Model      struct {
 		ModelID    string `json:"modelID"`
 		ProviderID string `json:"providerID"`

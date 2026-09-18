@@ -39,7 +39,7 @@ func buildOpenCodeFixture(t *testing.T) string {
 			('msg_user', 'ses_test', 1770000000000, 1770000000000,
 			 '{"role":"user","time":{"created":1770000000000}}'),
 			('msg_assistant', 'ses_test', 1770000001000, 1770000005000,
-			 '{"role":"assistant","providerID":"github-copilot","modelID":"gemini-2.5-pro","time":{"created":1770000001000,"completed":1770000005000},"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":10}}}')`,
+			 '{"role":"assistant","providerID":"github-copilot","modelID":"gemini-2.5-pro","cost":0.012345,"time":{"created":1770000001000,"completed":1770000005000},"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":10}}}')`,
 		`INSERT INTO part VALUES
 			('prt_user', 'msg_user', 'ses_test', 1770000000000, 1770000000000,
 			 '{"type":"text","text":"please inspect this"}'),
@@ -77,6 +77,9 @@ func TestOpenCodeListSessions(t *testing.T) {
 	if !s.HasTokens || s.InputTokens != 100 || s.OutputTokens != 20 || s.CacheReadTokens != 40 || s.CacheCreationTokens != 10 {
 		t.Errorf("token fields = %+v", s)
 	}
+	if !s.HasCost || s.Cost != 0.012345 {
+		t.Errorf("cost fields = %+v", s)
+	}
 	if want := 5 * time.Second; s.Duration != want {
 		t.Errorf("Duration = %v, want %v", s.Duration, want)
 	}
@@ -104,6 +107,14 @@ func TestOpenCodeLoadSession(t *testing.T) {
 	}
 	if msgs[1].Usage == nil || msgs[1].Usage.InputTokens != 100 || msgs[1].Usage.CacheReadTokens != 40 {
 		t.Errorf("assistant usage = %+v", msgs[1].Usage)
+	}
+	if msgs[1].Cost == nil || *msgs[1].Cost != 0.012345 {
+		t.Errorf("assistant cost = %v", msgs[1].Cost)
+	}
+	for i := 2; i < len(msgs); i++ {
+		if msgs[i].Cost != nil {
+			t.Errorf("message %d repeats assistant cost: %v", i, *msgs[i].Cost)
+		}
 	}
 	if msgs[2].Meta["name"] != "bash" || msgs[2].Meta["input"] != `{"command":"pwd"}` {
 		t.Errorf("tool call = %+v", msgs[2])

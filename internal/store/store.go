@@ -14,6 +14,8 @@ type Session struct {
 	Model               string
 	Started             time.Time
 	HasTokens           bool
+	HasCost             bool
+	Cost                float64
 	CacheCreationTokens int
 	Modified            time.Time
 	MessageCount        int
@@ -39,6 +41,7 @@ type Message struct {
 	Meta  map[string]any
 	Time  time.Time
 	Usage *TokenUsage // non-nil on assistant messages that carry usage data
+	Cost  *float64    // non-nil when the agent stored an estimated cost for this message
 }
 
 type Store interface {

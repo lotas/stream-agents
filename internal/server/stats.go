@@ -14,6 +14,8 @@ var statsTmpl = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "t
 type statsRow struct {
 	Label                                                                                         string
 	Sessions, Agents, Projects, Records, Input, Output, CacheRead, CacheWrite, Tokens, WithTokens int
+	Cost                                                                                          float64
+	WithCost                                                                                      int
 	Duration                                                                                      time.Duration
 	ActiveDuration                                                                                time.Duration
 	activity                                                                                      []store.Interval
@@ -40,6 +42,10 @@ func (row *statsRow) add(s store.Session) {
 	row.Duration += s.Duration
 	if s.HasTokens {
 		row.WithTokens++
+	}
+	if s.HasCost {
+		row.Cost += s.Cost
+		row.WithCost++
 	}
 }
 

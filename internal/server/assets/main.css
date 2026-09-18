@@ -19,6 +19,7 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 .session-list col.col-model    { width: 210px; }
 .session-list col.col-duration { width: 95px; }
 .session-list col.col-tokens   { width: 120px; }
+.session-list col.col-cost     { width: 90px; }
 .session-list col.col-mtime    { width: 150px; }
 .session-list th { background: #f0f0f0; text-align: left; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 .session-list td { padding: 0.55rem 0.8rem; border-top: 1px solid #eee; font-size: 0.9rem; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

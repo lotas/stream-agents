@@ -34,10 +34,11 @@
     <col class="col-duration">
     <col class="col-duration">
     <col class="col-tokens">
+    <col class="col-cost">
     <col class="col-mtime">
   </colgroup>
   <thead>
-    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Model(s)</th><th>Chat duration</th><th>Active time (est.)</th><th>Tokens</th><th>Modified</th></tr>
+    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Model(s)</th><th>Chat duration</th><th>Active time (est.)</th><th>Tokens</th><th>Est. cost</th><th>Modified</th></tr>
   </thead>
   <tbody>
     {{range .Sessions}}
@@ -49,6 +50,7 @@
       <td class="stat-cell">{{if .Duration}}{{fmtDuration .Duration}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="stat-cell">{{fmtDuration .ActiveDuration}}</td>
       <td class="stat-cell">{{if .InputTokens}}{{fmtTokens .InputTokens}}<span class="tok-sep">/</span>{{fmtTokens .OutputTokens}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
+      <td class="stat-cell">{{if .HasCost}}{{fmtCost .Cost}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="mtime">{{.Modified.Format "2006-01-02 15:04"}}</td>
     </tr>
     {{end}}

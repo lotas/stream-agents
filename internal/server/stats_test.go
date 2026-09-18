@@ -19,7 +19,7 @@ func (s statsStore) FilePath(string) string                                     
 
 func TestStatsGrouping(t *testing.T) {
 	sessions := []store.Session{
-		{Agent: "claude", Project: "/a", Started: time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC), InputTokens: 10, OutputTokens: 5, CacheReadTokens: 20, CacheCreationTokens: 3, HasTokens: true},
+		{Agent: "claude", Project: "/a", Started: time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC), InputTokens: 10, OutputTokens: 5, CacheReadTokens: 20, CacheCreationTokens: 3, HasTokens: true, HasCost: true, Cost: 1.25},
 		{Agent: "codex", Project: "/a", Started: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		{Agent: "claude", Project: "/b", Modified: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
 	}
@@ -34,6 +34,9 @@ func TestStatsGrouping(t *testing.T) {
 		}
 		if total.Sessions != 3 || total.Agents != 2 || total.Projects != 2 || total.Tokens != 38 || total.WithTokens != 1 || len(agents) != 2 {
 			t.Fatalf("bad totals: %+v", total)
+		}
+		if total.Cost != 1.25 || total.WithCost != 1 {
+			t.Fatalf("bad cost totals: %+v", total)
 		}
 	}
 }

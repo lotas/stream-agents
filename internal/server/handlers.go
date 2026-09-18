@@ -62,6 +62,7 @@ func shortModels(models string) string {
 var funcMap = template.FuncMap{
 	"shortPath":    shortPath,
 	"fmtTokens":    fmtTokens,
+	"fmtCost":      fmtCost,
 	"fmtDuration":  func(d time.Duration) string { return formatDuration(d) },
 	"isHot":        func(t time.Time) bool { return time.Since(t) < 10*time.Minute },
 	"isStreamable": func(agent string) bool { return agent == "claude" || agent == "codex" },
@@ -300,6 +301,8 @@ type sessionStats struct {
 	OutputTokens    int
 	CacheReadTokens int
 	HasTokens       bool
+	Cost            float64
+	HasCost         bool
 }
 
 type sessionData struct {
@@ -392,6 +395,13 @@ func fmtTokens(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+func fmtCost(cost float64) string {
+	if cost > 0 && cost < 1 {
+		return fmt.Sprintf("$%.4f", cost)
+	}
+	return fmt.Sprintf("$%.2f", cost)
+}
+
 // buildViewItems converts a flat message list into renderable view items,
 // fusing each tool_call with its matching tool_result into a single toolPair.
 func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolNames []toolNameCount, stats sessionStats) {
@@ -427,6 +437,10 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 			stats.OutputTokens += m.Usage.OutputTokens
 			stats.CacheReadTokens += m.Usage.CacheReadTokens
 			stats.HasTokens = true
+		}
+		if m.Cost != nil {
+			stats.Cost += *m.Cost
+			stats.HasCost = true
 		}
 		switch m.Role {
 		case "tool_call":

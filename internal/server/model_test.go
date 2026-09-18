@@ -16,3 +16,16 @@ func TestShortModels(t *testing.T) {
 		}
 	}
 }
+
+func TestFmtCost(t *testing.T) {
+	for cost, want := range map[float64]string{
+		0:        "$0.00",
+		0.000233: "$0.0002",
+		0.012345: "$0.0123",
+		1.5:      "$1.50",
+	} {
+		if got := fmtCost(cost); got != want {
+			t.Errorf("fmtCost(%v) = %q, want %q", cost, got, want)
+		}
+	}
+}

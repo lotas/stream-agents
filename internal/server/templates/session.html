@@ -35,7 +35,7 @@
   </div>
 
   <aside class="toc" aria-label="Session info">
-    {{if or .Stats.Duration .Stats.HasTokens .StreamOffset}}
+    {{if or .Stats.Duration .Stats.HasTokens .Stats.HasCost .StreamOffset}}
     <div class="session-stats">
       <div class="stat-row"><span class="stat-label">Duration</span><span class="stat-val" id="stat-duration">{{if .Stats.Duration}}{{.Stats.Duration}}{{else}}—{{end}}</span></div>
       {{if or .Stats.HasTokens .StreamOffset}}
@@ -43,6 +43,7 @@
       <div class="stat-row"><span class="stat-label">Out</span><span class="stat-val" id="stat-out">{{if .Stats.HasTokens}}{{fmtTokens .Stats.OutputTokens}}{{else}}—{{end}}</span></div>
       <div class="stat-row"><span class="stat-label">Cache hit</span><span class="stat-val" id="stat-cache">{{if .Stats.CacheReadTokens}}{{fmtTokens .Stats.CacheReadTokens}}{{else}}—{{end}}</span></div>
       {{end}}
+      {{if .Stats.HasCost}}<div class="stat-row"><span class="stat-label">Est. cost</span><span class="stat-val" id="stat-cost">{{fmtCost .Stats.Cost}}</span></div>{{end}}
     </div>
     {{end}}
     <div id="hot-section"{{if not .HotSessions}} hidden{{end}}>
