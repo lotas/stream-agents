@@ -11,6 +11,7 @@ type Session struct {
 	ID                  string
 	Project             string
 	Title               string
+	Model               string
 	Started             time.Time
 	HasTokens           bool
 	CacheCreationTokens int

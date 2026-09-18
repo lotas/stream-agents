@@ -50,7 +50,7 @@ func TestHandleListReturns200(t *testing.T) {
 	}
 }
 
-func TestHandleListContainsBothAgents(t *testing.T) {
+func TestHandleListContainsAgentFilters(t *testing.T) {
 	ts := buildTestServer(t)
 	defer ts.Close()
 
@@ -59,11 +59,10 @@ func TestHandleListContainsBothAgents(t *testing.T) {
 	io.Copy(buf, resp.Body)
 	resp.Body.Close()
 	body := buf.String()
-	if !strings.Contains(body, "claude") {
-		t.Error("list page missing 'claude'")
-	}
-	if !strings.Contains(body, "codex") {
-		t.Error("list page missing 'codex'")
+	for _, agent := range []string{"claude", "codex", "opencode"} {
+		if !strings.Contains(body, agent) {
+			t.Errorf("list page missing %q", agent)
+		}
 	}
 }
 

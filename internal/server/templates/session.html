@@ -5,6 +5,7 @@
   <a href="/">← All sessions</a>
   <span class="badge badge-{{.Session.Agent}}">{{.Session.Agent}}</span>
   <span class="project">{{shortPath .Session.Project}}</span>
+  {{if .Session.Model}}<span class="model" title="{{.Session.Model}}">{{shortModels .Session.Model}}</span>{{end}}
   <span class="mtime">{{.Session.Modified.Format "2006-01-02 15:04"}}</span>
 </div>
 
@@ -29,7 +30,7 @@
 </div>
 
 <div class="page-grid">
-  <div class="transcript" id="top"{{if isHot .Session.Modified}} data-stream="/stream/{{.Session.Agent}}/{{.Session.ID}}" data-stream-offset="{{.StreamOffset}}"{{end}}>
+  <div class="transcript" id="top"{{if and (isHot .Session.Modified) (isStreamable .Session.Agent)}} data-stream="/stream/{{.Session.Agent}}/{{.Session.ID}}" data-stream-offset="{{.StreamOffset}}"{{end}}>
     {{range .Items}}{{template "view-item" .}}{{end}}
   </div>
 

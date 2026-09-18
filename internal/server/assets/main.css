@@ -16,6 +16,7 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 .session-list col.col-agent    { width: 90px; }
 .session-list col.col-project  { width: 18%; }
 .session-list col.col-title    { /* fills remaining space */ }
+.session-list col.col-model    { width: 210px; }
 .session-list col.col-duration { width: 95px; }
 .session-list col.col-tokens   { width: 120px; }
 .session-list col.col-mtime    { width: 150px; }
@@ -32,10 +33,12 @@ main { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; }
 .stat-nil { color: #ccc; }
 .tok-sep { color: #bbb; margin: 0 0.15rem; }
 .project { font-size: 0.8rem; color: #555; }
+.model { font-size: 0.8rem; color: #555; }
 
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
 .badge-claude { background: #e0e7ff; color: #3730a3; }
 .badge-codex  { background: #dcfce7; color: #166534; }
+.badge-opencode { background: #ffedd5; color: #9a3412; }
 
 .session-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .session-header a { color: #0066cc; text-decoration: none; font-size: 0.9rem; }

@@ -6,6 +6,7 @@
     <a class="chip" href="{{.URL "agent" ""}}"       {{if eq .AgentFilter ""}}aria-pressed="true"{{end}}>All agents</a>
     <a class="chip badge-claude" href="{{.URL "agent" "claude"}}" {{if eq .AgentFilter "claude"}}aria-pressed="true"{{end}}>Claude</a>
     <a class="chip badge-codex"  href="{{.URL "agent" "codex"}}"  {{if eq .AgentFilter "codex"}}aria-pressed="true"{{end}}>Codex</a>
+    <a class="chip badge-opencode" href="{{.URL "agent" "opencode"}}" {{if eq .AgentFilter "opencode"}}aria-pressed="true"{{end}}>OpenCode</a>
   </div>
   <div class="filter-group">
     <select id="project-filter" class="filter-select">
@@ -29,13 +30,14 @@
     <col class="col-agent">
     <col class="col-project">
     <col class="col-title">
+    <col class="col-model">
     <col class="col-duration">
     <col class="col-duration">
     <col class="col-tokens">
     <col class="col-mtime">
   </colgroup>
   <thead>
-    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Chat duration</th><th>Active time (est.)</th><th>Tokens</th><th>Modified</th></tr>
+    <tr><th>Agent</th><th>Project</th><th>Title</th><th>Model(s)</th><th>Chat duration</th><th>Active time (est.)</th><th>Tokens</th><th>Modified</th></tr>
   </thead>
   <tbody>
     {{range .Sessions}}
@@ -43,6 +45,7 @@
       <td><span class="badge badge-{{.Agent}}">{{.Agent}}</span></td>
       <td class="project" title="{{.Project}}">{{shortPath .Project}}</td>
       <td><div class="title-wrap">{{if isHot .Modified}}<span class="hot-dot" title="Active in the last 10 minutes"></span>{{end}}<a href="/session/{{.Agent}}/{{.ID}}">{{if .Title}}{{.Title}}{{else}}(no title){{end}}</a></div></td>
+      <td class="model" title="{{.Model}}">{{if .Model}}{{shortModels .Model}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="stat-cell">{{if .Duration}}{{fmtDuration .Duration}}{{else}}<span class="stat-nil">—</span>{{end}}</td>
       <td class="stat-cell">{{fmtDuration .ActiveDuration}}</td>
       <td class="stat-cell">{{if .InputTokens}}{{fmtTokens .InputTokens}}<span class="tok-sep">/</span>{{fmtTokens .OutputTokens}}{{else}}<span class="stat-nil">—</span>{{end}}</td>

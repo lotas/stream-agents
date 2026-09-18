@@ -1,9 +1,9 @@
 # stream-agents
 
 `stream-agents` is a small local web viewer for AI agent transcripts. It scans
-Claude and Codex JSONL session files, lists them by project and modified time,
-and renders each transcript with Markdown, turn navigation, and collapsible tool
-calls.
+Claude and Codex JSONL sessions plus the OpenCode session database, lists them
+by project and modified time, and renders each transcript with Markdown, turn
+navigation, and collapsible tool calls.
 
 ## Screenshots
 
@@ -18,7 +18,7 @@ Transcript view:
 ## Requirements
 
 - Go 1.23.6 or newer
-- Local Claude and/or Codex transcript files
+- Local Claude, Codex, and/or OpenCode transcripts
 
 ## Run
 
@@ -41,16 +41,21 @@ go run ./cmd/server \
   -addr 127.0.0.1:7777 \
   -claude-dir ~/.claude/projects \
   -claude-config-dir ~/.config/claude/projects \
-  -codex-dir ~/.codex/sessions
+  -codex-dir ~/.codex/sessions \
+  -opencode-dir ~/.local/share/opencode
 ```
 
 ## What It Reads
 
 - Claude sessions from `~/.claude/projects` and `~/.config/claude/projects`
 - Codex sessions from `~/.codex/sessions`
+- OpenCode sessions from `~/.local/share/opencode/opencode.db` (or `$XDG_DATA_HOME/opencode/opencode.db`)
 
-The app only reads local transcript files. Keep the default localhost bind unless
-you are comfortable exposing your agent history on another interface.
+OpenCode rows include the exact provider/model recorded on assistant messages;
+sessions that switched models show each distinct model used.
+
+The app only reads local transcript storage. Keep the default localhost bind
+unless you are comfortable exposing your agent history on another interface.
 
 ## Development
 
@@ -63,7 +68,7 @@ make clean
 Project layout:
 
 - `cmd/server`: HTTP server entry point
-- `internal/store`: Claude/Codex transcript discovery and parsing
+- `internal/store`: Claude/Codex/OpenCode transcript discovery and parsing
 - `internal/server`: routes, templates, and static assets
 - `internal/render`: Markdown rendering
 

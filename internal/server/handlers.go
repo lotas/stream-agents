@@ -30,11 +30,42 @@ func shortPath(path string) string {
 	return path
 }
 
+var knownModelProviderPrefixes = []string{
+	"openrouter/",
+	"github-copilot/",
+	"github-models/",
+	"opencode/",
+	"anthropic/",
+	"openai/",
+	"google/",
+	"amazon-bedrock/",
+	"azure/",
+	"vertexai/",
+	"gitlab/",
+}
+
+// shortModels removes a known OpenCode provider ID while preserving any vendor
+// namespace that is part of the model ID itself (for example moonshotai/kimi).
+func shortModels(models string) string {
+	parts := strings.Split(models, ", ")
+	for i, model := range parts {
+		for _, prefix := range knownModelProviderPrefixes {
+			if strings.HasPrefix(model, prefix) {
+				parts[i] = strings.TrimPrefix(model, prefix)
+				break
+			}
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 var funcMap = template.FuncMap{
-	"shortPath":   shortPath,
-	"fmtTokens":   fmtTokens,
-	"fmtDuration": func(d time.Duration) string { return formatDuration(d) },
-	"isHot":       func(t time.Time) bool { return time.Since(t) < 10*time.Minute },
+	"shortPath":    shortPath,
+	"fmtTokens":    fmtTokens,
+	"fmtDuration":  func(d time.Duration) string { return formatDuration(d) },
+	"isHot":        func(t time.Time) bool { return time.Since(t) < 10*time.Minute },
+	"isStreamable": func(agent string) bool { return agent == "claude" || agent == "codex" },
+	"shortModels":  shortModels,
 }
 
 var (
@@ -391,6 +422,12 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 	}
 
 	for _, m := range msgs {
+		if m.Usage != nil {
+			stats.InputTokens += m.Usage.InputTokens
+			stats.OutputTokens += m.Usage.OutputTokens
+			stats.CacheReadTokens += m.Usage.CacheReadTokens
+			stats.HasTokens = true
+		}
 		switch m.Role {
 		case "tool_call":
 			name, _ := m.Meta["name"].(string)
@@ -474,12 +511,6 @@ func buildViewItems(msgs []store.Message) (items []viewItem, turns []turn, toolN
 				Body:      render.RenderMarkdown(m.Text),
 				TimeLabel: elapsed(m.Time),
 			}
-			if m.Usage != nil {
-				stats.InputTokens += m.Usage.InputTokens
-				stats.OutputTokens += m.Usage.OutputTokens
-				stats.CacheReadTokens += m.Usage.CacheReadTokens
-				stats.HasTokens = true
-			}
 			items = append(items, vi)
 
 		case "system":
@@ -518,7 +549,7 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Validate agent is a known value.
-	if agent != "claude" && agent != "codex" {
+	if agent != "claude" && agent != "codex" && agent != "opencode" {
 		http.NotFound(w, r)
 		return
 	}
@@ -531,24 +562,6 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fpath := h.idx.FilePath(agent, id)
-	if fpath == "" {
-		http.NotFound(w, r)
-		return
-	}
-	resolved, err := filepath.EvalSymlinks(fpath)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	_ = resolved
-
-	msgs, err := h.idx.LoadSession(r.Context(), agent, id)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
 	var sess store.Session
 	for _, s := range allSessions {
 		if s.Agent == agent && s.ID == id {
@@ -556,11 +569,31 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	if sess.ID == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	fpath := h.idx.FilePath(agent, id)
+	if fpath != "" {
+		resolved, err := filepath.EvalSymlinks(fpath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		_ = resolved
+	}
+
+	msgs, err := h.idx.LoadSession(r.Context(), agent, id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 
 	items, turns, toolNames, stats := buildViewItems(msgs)
 
 	var streamOffset int64
-	if time.Since(sess.Modified) < 10*time.Minute {
+	if fpath != "" && time.Since(sess.Modified) < 10*time.Minute {
 		if fi, err := os.Stat(fpath); err == nil {
 			streamOffset = fi.Size()
 		}
