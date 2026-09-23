@@ -1,0 +1,32 @@
+{{template "layout.html" .}}
+{{define "searchValue"}}{{.Query}}{{end}}
+{{define "content"}}
+<h1>Search</h1>
+<form class="filters" action="/search" method="get">
+  <input class="search-page-input" type="search" name="q" value="{{.Query}}" placeholder="Keywords (all must match)" aria-label="Search keywords" autofocus>
+  <select class="filter-select" name="agent" aria-label="Agent"><option value="">All agents</option><option value="claude" {{if eq .AgentFilter "claude"}}selected{{end}}>Claude</option><option value="codex" {{if eq .AgentFilter "codex"}}selected{{end}}>Codex</option><option value="opencode" {{if eq .AgentFilter "opencode"}}selected{{end}}>OpenCode</option></select>
+  <button class="chip" type="submit">Search</button>
+</form>
+{{if .Query}}
+<p class="stats-note">{{.Total}} of {{.Scanned}} chats contain all keywords{{if gt .Total (len .Results)}}; showing the {{len .Results}} most recent{{end}}. Matching is case-insensitive across titles, projects, messages, and tool calls.</p>
+{{if .Results}}
+<ol class="search-results">
+  {{range .Results}}
+  <li class="search-result">
+    <div class="search-result-head">
+      <span class="badge badge-{{.Session.Agent}}">{{.Session.Agent}}</span>
+      <a href="/session/{{.Session.Agent}}/{{.Session.ID}}">{{if .Session.Title}}{{.Session.Title}}{{else}}(no title){{end}}</a>
+    </div>
+    <div class="search-result-meta">
+      <span title="{{.Session.Project}}">{{shortPath .Session.Project}}</span>
+      <span>{{if not .Session.Started.IsZero}}{{.Session.Started.Format "2006-01-02 15:04"}} → {{end}}{{.Session.Modified.Format "2006-01-02 15:04"}}</span>
+      <span>{{.Hits}} matching message{{if ne .Hits 1}}s{{end}}</span>
+      {{if .Session.Model}}<span>{{shortModels .Session.Model}}</span>{{end}}
+    </div>
+    {{range .Snippets}}<p class="search-snippet"><span class="search-role">{{.Role}}</span>{{.Body}}</p>{{end}}
+  </li>
+  {{end}}
+</ol>
+{{else}}<p class="stats-empty">No chats match these keywords.</p>{{end}}
+{{end}}
+{{end}}

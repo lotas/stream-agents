@@ -10,6 +10,9 @@
   <header>
     <a href="/" class="brand">stream-agents</a>
     <nav aria-label="Main navigation"><a href="/">Sessions</a><a href="/stats">Stats</a></nav>
+    <form class="header-search" action="/search" method="get" role="search">
+      <input id="header-search" type="search" name="q" value="{{block "searchValue" .}}{{end}}" placeholder="Search chats…  ( / )" aria-label="Search chats">
+    </form>
   </header>
   <main>
     {{block "content" .}}{{end}}

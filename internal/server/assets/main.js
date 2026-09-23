@@ -22,6 +22,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
+  // ── "/" focuses the header search unless the user is already typing ────
+  const headerSearch = document.getElementById('header-search');
+  if (headerSearch) {
+    document.addEventListener('keydown', e => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      e.preventDefault();
+      headerSearch.focus();
+      headerSearch.select();
+    });
+  }
+
   // ── Copy buttons on <pre> blocks ────────────────────────────────────────
   function attachCopyBtn(pre) {
     if (pre.querySelector('.copy-btn')) return;
