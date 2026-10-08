@@ -45,6 +45,19 @@ go run ./cmd/server \
   -opencode-dir ~/.local/share/opencode
 ```
 
+### Menu bar
+
+```sh
+make tray
+```
+
+Adds a menu bar item showing today's and this week's estimated cost across all
+agents. The dropdown adds token counts, a per-agent breakdown for today, totals
+for this month, last month and the last 3 months, active sessions, and links
+into the web UI. Sessions count towards the local day they started. The same data is
+served as JSON at `/api/summary.json`. On macOS this build needs cgo (Xcode
+command line tools).
+
 ## What It Reads
 
 - Claude sessions from `~/.claude/projects` and `~/.config/claude/projects`

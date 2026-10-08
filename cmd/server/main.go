@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"stream-agents/internal/server"
 	"stream-agents/internal/store"
+	"stream-agents/internal/tray"
 )
 
 func main() {
@@ -25,6 +27,7 @@ func main() {
 	claudeConfigDir := flag.String("claude-config-dir", filepath.Join(home, ".config", "claude", "projects"), "Claude projects directory (~/.config/claude/projects)")
 	codexDir := flag.String("codex-dir", filepath.Join(home, ".codex", "sessions"), "Codex sessions directory")
 	opencodeDir := flag.String("opencode-dir", filepath.Join(dataHome, "opencode"), "OpenCode data directory (containing opencode.db)")
+	trayMode := flag.Bool("tray", false, "show today's usage in the menu bar / system tray")
 	idleCutoff := flag.Duration("idle-cutoff", 15*time.Minute, "maximum gap between events counted as active time")
 	flag.Parse()
 	if *idleCutoff <= 0 {
@@ -41,7 +44,22 @@ func main() {
 	mux := server.NewMux(idx)
 
 	fmt.Printf("stream-agents listening on http://%s\n", *addr)
-	if err := http.ListenAndServe(*addr, mux); err != nil {
-		log.Fatal(err)
+	if !*trayMode {
+		log.Fatal(http.ListenAndServe(*addr, mux))
 	}
+	go func() { log.Fatal(http.ListenAndServe(*addr, mux)) }()
+	tray.Run(idx, "http://"+browseHost(*addr))
+}
+
+// browseHost turns a listen address into one a browser can open, mapping
+// wildcard hosts to localhost.
+func browseHost(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
