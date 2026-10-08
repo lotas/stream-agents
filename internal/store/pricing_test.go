@@ -45,6 +45,30 @@ func TestEstimateModelCost(t *testing.T) {
 			want:  .25,
 			ok:    true,
 		},
+		{
+			model: "claude-opus-5-5",
+			usage: TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000},
+			want:  24,
+			ok:    true,
+		},
+		{
+			model: "claude-sonnet-5-5-20260901",
+			usage: TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000},
+			want:  12,
+			ok:    true,
+		},
+		{
+			model: "gpt-6.1-sol",
+			usage: TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000},
+			want:  12.1,
+			ok:    true,
+		},
+		{
+			model: "gpt-6-luna",
+			usage: TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000},
+			want:  .6,
+			ok:    true,
+		},
 		{model: "unknown-model", usage: TokenUsage{InputTokens: 1_000_000}},
 	}
 	for _, tt := range tests {

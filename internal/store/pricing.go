@@ -11,7 +11,7 @@ type modelPrice struct {
 	Output     float64
 }
 
-// Prices checked 2026-09-18 against the providers' standard API pricing:
+// Prices checked 2026-10-08 against the providers' standard API pricing:
 //
 //	OpenAI: https://developers.openai.com/api/docs/pricing
 //	Anthropic: https://docs.anthropic.com/en/docs/about-claude/pricing
@@ -19,6 +19,9 @@ type modelPrice struct {
 // Fast, batch, regional, and long-context modifiers are intentionally omitted.
 var modelPrices = map[string]modelPrice{
 	"gpt-6-astra":       {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
+	"gpt-6.1-sol":       {Input: 2, CacheRead: .1, CacheWrite: 2.5, Output: 10},
+	"gpt-6-sol":         {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
+	"gpt-6-luna":        {Input: .1, CacheRead: .01, CacheWrite: .125, Output: .5},
 	"gpt-5.6":           {Input: 4, CacheRead: .4, CacheWrite: 5, Output: 20},
 	"gpt-5.6-sol":       {Input: 4, CacheRead: .4, CacheWrite: 5, Output: 20},
 	"gpt-5.6-terra":     {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 12},
@@ -34,6 +37,9 @@ var modelPrices = map[string]modelPrice{
 	"claude-fable-5-1":  {Input: 10, CacheRead: .25, CacheWrite: 12.5, Output: 50},
 	"claude-fable-5":    {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
 	"claude-mythos-5":   {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
+	"claude-opus-5-5":   {Input: 4, CacheRead: .2, CacheWrite: 5, Output: 20},
+	"claude-sonnet-5-5": {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
+	"claude-haiku-5-5":  {Input: .1, CacheRead: .01, CacheWrite: .125, Output: .5},
 	"claude-opus-5":     {Input: 5, CacheRead: .5, CacheWrite: 6.25, Output: 25},
 	"claude-sonnet-5":   {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
 	"claude-opus-4-8":   {Input: 5, CacheRead: .5, CacheWrite: 6.25, Output: 25},
@@ -61,9 +67,13 @@ func lookupModelPrice(model string) (modelPrice, bool) {
 	if price, ok := modelPrices[model]; ok {
 		return price, true
 	}
-	// Claude sometimes records dated snapshots of a catalogued model.
+	// Claude sometimes records dated snapshots of a catalogued model. Point
+	// releases must precede their base (claude-opus-5-5 before claude-opus-5).
 	for _, base := range []string{
 		"claude-fable-5-1",
+		"claude-opus-5-5",
+		"claude-sonnet-5-5",
+		"claude-haiku-5-5",
 		"claude-fable-5",
 		"claude-mythos-5",
 		"claude-opus-5",
