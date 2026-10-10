@@ -25,6 +25,9 @@ var icon []byte
 
 const refreshInterval = time.Minute
 
+// maxAgents is the number of per-agent menu slots under each period.
+const maxAgents = 4
+
 // Run blocks running the tray until the user picks Quit. It must be called
 // from the main goroutine.
 func Run(idx *store.Index, baseURL string) {
@@ -40,7 +43,15 @@ type link struct {
 }
 
 func newLink(title, url string) *link {
-	l := &link{item: systray.AddMenuItem(title, "")}
+	return watchLink(systray.AddMenuItem(title, ""), title, url)
+}
+
+func newSubLink(parent *systray.MenuItem, title, url string) *link {
+	return watchLink(parent.AddSubMenuItem(title, ""), title, url)
+}
+
+func watchLink(item *systray.MenuItem, title, url string) *link {
+	l := &link{item: item}
 	l.set(title, url)
 	go func() {
 		for range l.item.ClickedCh {
@@ -73,13 +84,26 @@ func onReady(idx *store.Index, baseURL string) {
 
 	today := newLink("Today", baseURL+"/stats")
 	var agents []*link
-	for range 4 {
+	for range maxAgents {
 		agents = append(agents, newLink("", ""))
 	}
 	systray.AddSeparator()
-	var periods []*link
+	// Longer periods list their per-agent breakdown in a submenu. A parent
+	// item that opens a submenu isn't clickable itself, so the submenu
+	// repeats the all-agents link first.
+	type periodMenu struct {
+		item   *systray.MenuItem
+		all    *link
+		agents []*link
+	}
+	var periods []periodMenu
 	for range 4 {
-		periods = append(periods, newLink("", ""))
+		m := periodMenu{item: systray.AddMenuItem("", "")}
+		m.all = newSubLink(m.item, "", "")
+		for range maxAgents {
+			m.agents = append(m.agents, newSubLink(m.item, "", ""))
+		}
+		periods = append(periods, m)
 	}
 	systray.AddSeparator()
 	activeHeader := systray.AddMenuItem("Active sessions", "")
@@ -113,14 +137,7 @@ func onReady(idx *store.Index, baseURL string) {
 		systray.SetTitle(" " + fmtCost(s.Today.SummaryUsage, true) + " / " + fmtCost(s.Week.SummaryUsage, true))
 		systray.SetTooltip("stream-agents — updated " + now.Format("15:04"))
 		today.set("Today: "+fmtUsage(s.Today.SummaryUsage), statsURL(baseURL, "", s.Today))
-		for i, l := range agents {
-			if i < len(s.Today.Agents) {
-				a := s.Today.Agents[i]
-				l.set("    "+a.Agent+": "+fmtUsage(a.SummaryUsage), statsURL(baseURL, a.Agent, s.Today))
-			} else {
-				l.set("", "")
-			}
-		}
+		setAgents(agents, "    ", baseURL, s.Today)
 		for i, p := range []struct {
 			label  string
 			period server.SummaryPeriod
@@ -130,7 +147,9 @@ func onReady(idx *store.Index, baseURL string) {
 			{"Last month", s.LastMonth},
 			{"Last 3 months", s.Last3Months},
 		} {
-			periods[i].set(p.label+": "+fmtUsage(p.period.SummaryUsage), statsURL(baseURL, "", p.period))
+			periods[i].item.SetTitle(p.label + ": " + fmtUsage(p.period.SummaryUsage))
+			periods[i].all.set("All agents: "+fmtUsage(p.period.SummaryUsage), statsURL(baseURL, "", p.period))
+			setAgents(periods[i].agents, "", baseURL, p.period)
 		}
 		if len(s.Active) == 0 {
 			activeHeader.Hide()
@@ -152,6 +171,18 @@ func onReady(idx *store.Index, baseURL string) {
 			refresh()
 		}
 	}()
+}
+
+// setAgents fills links with p's per-agent usage, hiding unused slots.
+func setAgents(links []*link, indent, baseURL string, p server.SummaryPeriod) {
+	for i, l := range links {
+		if i < len(p.Agents) {
+			a := p.Agents[i]
+			l.set(indent+a.Agent+": "+fmtUsage(a.SummaryUsage), statsURL(baseURL, a.Agent, p))
+		} else {
+			l.set("", "")
+		}
+	}
 }
 
 func statsURL(baseURL, agent string, p server.SummaryPeriod) string {
