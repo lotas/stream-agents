@@ -148,6 +148,9 @@ func TestClaudeEstimatedCost(t *testing.T) {
 	if sessions[0].Model != "claude-opus-5, claude-fable-5" || !sessions[0].HasCost || sessions[0].Cost != 15 {
 		t.Fatalf("priced session = %+v", sessions[0])
 	}
+	if u := sessions[0].Usage; len(u) != 2 || u[0].Provider != "anthropic" || u[0].Model != "claude-opus-5" || u[0].Cost != 5 || u[0].InputTokens != 1000000 || u[1].Model != "claude-fable-5" || u[1].Cost != 10 {
+		t.Fatalf("per-model usage = %+v", u)
+	}
 	msgs, err := cs.LoadSession(context.Background(), "priced-session")
 	if err != nil || len(msgs) != 2 || msgs[0].Cost == nil || *msgs[0].Cost != 5 || msgs[1].Cost == nil || *msgs[1].Cost != 10 {
 		t.Fatalf("priced messages = %+v, err = %v", msgs, err)

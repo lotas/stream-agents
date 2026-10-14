@@ -80,6 +80,9 @@ func TestOpenCodeListSessions(t *testing.T) {
 	if !s.HasCost || s.Cost != 0.012345 {
 		t.Errorf("cost fields = %+v", s)
 	}
+	if u := s.Usage; len(u) != 1 || u[0].Provider != "github-copilot" || u[0].Model != "gemini-2.5-pro" || u[0].InputTokens != 100 || u[0].CacheCreationTokens != 10 || u[0].Cost != 0.012345 {
+		t.Errorf("per-model usage = %+v", u)
+	}
 	if want := 5 * time.Second; s.Duration != want {
 		t.Errorf("Duration = %v, want %v", s.Duration, want)
 	}

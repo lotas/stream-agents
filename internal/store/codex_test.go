@@ -174,4 +174,7 @@ func TestCodexEstimatedCostAcrossModelSwitch(t *testing.T) {
 	if s.Model != "gpt-5-codex, gpt-5.4" || !s.HasCost || s.Cost != 3.75 {
 		t.Fatalf("switched-model estimate = %+v", s)
 	}
+	if u := s.Usage; len(u) != 2 || u[0].Provider != "openai" || u[0].Model != "gpt-5-codex" || u[0].InputTokens != 1000000 || u[0].Cost != 1.25 || u[1].Model != "gpt-5.4" || u[1].InputTokens != 1000000 || u[1].Cost != 2.5 {
+		t.Fatalf("per-model usage = %+v", u)
+	}
 }

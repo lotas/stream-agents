@@ -195,10 +195,13 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 						CacheCreationTokens: msg.Usage.CacheCreationTokens,
 						CacheReadTokens:     msg.Usage.CacheReadTokens,
 					}
+					var costPtr *float64
 					if cost, ok := estimateModelCost(msg.Model, usage); ok {
 						sess.HasCost = true
 						sess.Cost += cost
+						costPtr = &cost
 					}
+					sess.addUsage("anthropic", msg.Model, &usage, costPtr)
 				}
 			}
 		}

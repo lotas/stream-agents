@@ -58,6 +58,21 @@ into the web UI. Sessions count towards the local day they started. The same dat
 served as JSON at `/api/summary.json`. On macOS this build needs cgo (Xcode
 command line tools).
 
+### Command line stats
+
+```sh
+go run ./cmd/server stats                      # all time, by day, agent, provider and model
+go run ./cmd/server stats -group month -breakdown
+go run ./cmd/server stats -days 7 -by period,model
+go run ./cmd/server stats -from 2026-09-01 -to 2026-09-30 -agent codex -json
+```
+
+Prints input, output, cache read/write and total tokens plus estimated cost,
+broken down by period (`-group day|month|year`), agent, provider and model.
+`-breakdown` lists per-model rows under each period. Sessions count towards the
+local day they started. Costs marked `*` include tokens from models without a
+known price. The transcript directory flags above also apply.
+
 ## What It Reads
 
 - Claude sessions from `~/.claude/projects` and `~/.config/claude/projects`

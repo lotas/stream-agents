@@ -137,6 +137,19 @@ func (s *OpenCodeStore) ListSessions(ctx context.Context) ([]Session, error) {
 			sess.HasCost = true
 			sess.Cost += *data.Cost
 		}
+		if data.Tokens != nil || data.Cost != nil {
+			var usage *TokenUsage
+			if data.Tokens != nil {
+				usage = &TokenUsage{
+					InputTokens:         data.Tokens.Input,
+					OutputTokens:        data.Tokens.Output,
+					CacheReadTokens:     data.Tokens.Cache.Read,
+					CacheCreationTokens: data.Tokens.Cache.Write,
+				}
+			}
+			provider, modelID := data.providerModel()
+			sess.addUsage(provider, modelID, usage, data.Cost)
+		}
 		model := data.model()
 		if model != "" {
 			if modelSeen[sessionID] == nil {
@@ -276,11 +289,15 @@ type openCodeMessageData struct {
 	} `json:"tokens"`
 }
 
-func (d openCodeMessageData) model() string {
-	provider, model := d.ProviderID, d.ModelID
-	if model == "" {
-		provider, model = d.Model.ProviderID, d.Model.ModelID
+func (d openCodeMessageData) providerModel() (string, string) {
+	if d.ModelID == "" {
+		return d.Model.ProviderID, d.Model.ModelID
 	}
+	return d.ProviderID, d.ModelID
+}
+
+func (d openCodeMessageData) model() string {
+	provider, model := d.providerModel()
 	if provider == "" {
 		return model
 	}

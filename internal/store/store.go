@@ -26,6 +26,41 @@ type Session struct {
 	InputTokens         int
 	OutputTokens        int
 	CacheReadTokens     int
+	Usage               []ModelUsage // per-model token usage, in first-use order
+}
+
+// ModelUsage is the usage a session recorded against one provider/model.
+type ModelUsage struct {
+	Provider string
+	Model    string
+	TokenUsage
+	Tokens  bool // usage carried token counts
+	HasCost bool
+	Cost    float64
+}
+
+// addUsage accumulates usage for provider/model into the session's per-model
+// breakdown. A nil cost means the price is unknown.
+func (s *Session) addUsage(provider, model string, usage *TokenUsage, cost *float64) {
+	i := 0
+	for i < len(s.Usage) && (s.Usage[i].Provider != provider || s.Usage[i].Model != model) {
+		i++
+	}
+	if i == len(s.Usage) {
+		s.Usage = append(s.Usage, ModelUsage{Provider: provider, Model: model})
+	}
+	u := &s.Usage[i]
+	if usage != nil {
+		u.Tokens = true
+		u.InputTokens += usage.InputTokens
+		u.OutputTokens += usage.OutputTokens
+		u.CacheCreationTokens += usage.CacheCreationTokens
+		u.CacheReadTokens += usage.CacheReadTokens
+	}
+	if cost != nil {
+		u.HasCost = true
+		u.Cost += *cost
+	}
 }
 
 type TokenUsage struct {

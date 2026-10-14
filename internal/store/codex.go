@@ -184,10 +184,14 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 				sess.InputTokens = total.InputTokens
 				sess.OutputTokens = total.OutputTokens
 				sess.CacheReadTokens = total.CacheReadTokens
-				if cost, ok := estimateModelCost(currentModel, u.delta(previousUsage).tokenUsage()); ok {
+				delta := u.delta(previousUsage).tokenUsage()
+				var costPtr *float64
+				if cost, ok := estimateModelCost(currentModel, delta); ok {
 					sess.HasCost = true
 					sess.Cost += cost
+					costPtr = &cost
 				}
+				sess.addUsage("openai", currentModel, &delta, costPtr)
 				previousUsage = *u
 			}
 		}
