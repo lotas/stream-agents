@@ -121,3 +121,28 @@ func TestWriteJSON(t *testing.T) {
 		t.Fatalf("json = %s", b.String())
 	}
 }
+
+func TestBilled(t *testing.T) {
+	sessions := testSessions()
+	for i := range sessions[1].Usage {
+		sessions[1].Usage[i].Billed = sessions[1].Usage[i].Cost * 1.75
+	}
+	for _, s := range []int{0, 2} {
+		for i := range sessions[s].Usage {
+			sessions[s].Usage[i].Billed = sessions[s].Usage[i].Cost
+		}
+	}
+	rep := Build(sessions, Options{Group: "day", CostMultipliers: map[string]float64{"codex": 1.75}}, time.UTC)
+	if rep.Total.Cost != 6.5 || rep.Total.Billed != 8 {
+		t.Fatalf("total cost %v billed %v, want 6.5 and 8", rep.Total.Cost, rep.Total.Billed)
+	}
+	var b bytes.Buffer
+	if err := WriteText(&b, rep, []string{SectionAgent}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Billed", "$3.50*", "$8.00*", "codex ×1.75"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("output missing %q:\n%s", want, b.String())
+		}
+	}
+}

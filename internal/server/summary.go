@@ -36,7 +36,8 @@ type SummaryAgent struct {
 type SummaryUsage struct {
 	Sessions    int     `json:"sessions"`
 	Tokens      int     `json:"tokens"`
-	Cost        float64 `json:"cost"`
+	Cost        float64 `json:"cost"`        // at API prices
+	Billed      float64 `json:"billed"`      // Cost scaled by per-agent cost multipliers
 	CostPartial bool    `json:"costPartial"` // some sessions had tokens but no known price
 }
 
@@ -47,7 +48,7 @@ type SummaryActive struct {
 }
 
 func summaryUsage(row statsRow) SummaryUsage {
-	return SummaryUsage{Sessions: row.Sessions, Tokens: row.Tokens, Cost: row.Cost, CostPartial: row.WithCost < row.WithTokens}
+	return SummaryUsage{Sessions: row.Sessions, Tokens: row.Tokens, Cost: row.Cost, Billed: row.Billed, CostPartial: row.WithCost < row.WithTokens}
 }
 
 // summaryPeriod aggregates sessions started in [from, to).

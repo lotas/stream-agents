@@ -14,7 +14,7 @@ var statsTmpl = template.Must(template.New("").Funcs(funcMap).ParseFS(tmplFS, "t
 type statsRow struct {
 	Label                                                                                         string
 	Sessions, Agents, Projects, Records, Input, Output, CacheRead, CacheWrite, Tokens, WithTokens int
-	Cost                                                                                          float64
+	Cost, Billed                                                                                  float64
 	WithCost                                                                                      int
 	Duration                                                                                      time.Duration
 	ActiveDuration                                                                                time.Duration
@@ -45,6 +45,7 @@ func (row *statsRow) add(s store.Session) {
 	}
 	if s.HasCost {
 		row.Cost += s.Cost
+		row.Billed += s.Billed
 		row.WithCost++
 	}
 }
@@ -53,7 +54,7 @@ type statsData struct {
 	Heatmaps                                               []activityHeatmap
 	PageTitle, Group, AgentFilter, ProjectFilter, From, To string
 	Projects                                               []string
-	IdleCutoff                                             string
+	IdleCutoff, CostMultipliers                            string
 	Total                                                  statsRow
 	Periods, ByAgent                                       []*statsRow
 }
@@ -161,6 +162,7 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.IdleCutoff = h.idx.IdleCutoff.String()
+	d.CostMultipliers = store.FormatCostMultipliers(h.idx.CostMultipliers)
 	projects := map[string]bool{}
 	var filtered, matching []store.Session
 	for _, s := range sessions {

@@ -73,7 +73,9 @@ func runStats(args []string) {
 		fail("-from must not be after -to")
 	}
 
-	sessions, err := newIndex().ListAll(context.Background(), "", "")
+	idx := newIndex()
+	opts.CostMultipliers = idx.CostMultipliers
+	sessions, err := idx.ListAll(context.Background(), "", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "stats: failed to list sessions:", err)
 		os.Exit(1)

@@ -302,6 +302,7 @@ type sessionStats struct {
 	CacheReadTokens int
 	HasTokens       bool
 	Cost            float64
+	Billed          float64
 	HasCost         bool
 }
 
@@ -609,6 +610,7 @@ func (h *handlers) handleSession(w http.ResponseWriter, r *http.Request) {
 		stats.HasCost = true
 		stats.Cost = sess.Cost
 	}
+	stats.Billed = stats.Cost * h.idx.CostMultiplier(agent)
 
 	var streamOffset int64
 	if fpath != "" && time.Since(sess.Modified) < 10*time.Minute {

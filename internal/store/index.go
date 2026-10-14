@@ -11,10 +11,21 @@ import (
 type Index struct {
 	stores     []Store
 	IdleCutoff time.Duration
+	// CostMultipliers scales each agent's API-price estimate into its billed
+	// cost; agents not listed bill at API prices.
+	CostMultipliers map[string]float64
 }
 
 func NewIndex(stores ...Store) *Index {
-	return &Index{stores: stores, IdleCutoff: 15 * time.Minute}
+	return &Index{stores: stores, IdleCutoff: 15 * time.Minute, CostMultipliers: DefaultCostMultipliers}
+}
+
+// CostMultiplier returns the billed-to-API cost ratio for agent.
+func (idx *Index) CostMultiplier(agent string) float64 {
+	if m, ok := idx.CostMultipliers[agent]; ok {
+		return m
+	}
+	return 1
 }
 
 // ListAll refreshes all stores and returns a combined, sorted session list.
@@ -36,6 +47,13 @@ func (idx *Index) ListAll(ctx context.Context, agentFilter, projectFilter string
 			if len(sess.ActivityTimes) > 0 {
 				sess.Activity = ActivityIntervals(sess.ActivityTimes, idx.IdleCutoff)
 				sess.ActiveDuration = IntervalDuration(sess.Activity)
+			}
+			// Copy Usage so billing never writes into the store's cached session.
+			m := idx.CostMultiplier(sess.Agent)
+			sess.Billed = sess.Cost * m
+			sess.Usage = append([]ModelUsage(nil), sess.Usage...)
+			for i := range sess.Usage {
+				sess.Usage[i].Billed = sess.Usage[i].Cost * m
 			}
 			all = append(all, sess)
 		}

@@ -15,7 +15,8 @@ type Session struct {
 	Started             time.Time
 	HasTokens           bool
 	HasCost             bool
-	Cost                float64
+	Cost                float64 // estimate at API prices
+	Billed              float64 // Cost scaled by the agent's cost multiplier; set by Index.ListAll
 	CacheCreationTokens int
 	Modified            time.Time
 	MessageCount        int
@@ -37,6 +38,7 @@ type ModelUsage struct {
 	Tokens  bool // usage carried token counts
 	HasCost bool
 	Cost    float64
+	Billed  float64 // Cost scaled by the agent's cost multiplier; set by Index.ListAll
 }
 
 // addUsage accumulates usage for provider/model into the session's per-model

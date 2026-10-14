@@ -21,7 +21,7 @@ func TestFormatting(t *testing.T) {
 		{server.SummaryUsage{Cost: 14.3}, true, "$14"},
 		{server.SummaryUsage{Cost: 3.456, CostPartial: true}, true, "$3.46+"},
 	} {
-		if got := fmtCost(tc.u, tc.short); got != tc.want {
+		if got := fmtCost(tc.u.Cost, tc.u.CostPartial, tc.short); got != tc.want {
 			t.Errorf("fmtCost(%+v, %v) = %q, want %q", tc.u, tc.short, got, tc.want)
 		}
 	}

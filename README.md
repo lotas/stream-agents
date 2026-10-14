@@ -88,6 +88,13 @@ of current standard model prices. Unknown models show no cost. The estimates do
 not account for historical price changes or fast, batch, regional, and
 long-context pricing modifiers.
 
+Every cost is also shown as **Billed (est.)**: the estimate scaled by a
+per-agent multiplier for plans that charge more than API prices. Codex defaults
+to `1.75`. Override with `-cost-multiplier codex=1,claude=1.2` or
+`STREAM_AGENTS_COST_MULTIPLIER`; listed agents replace the defaults, others bill
+at API prices. Usage that never reaches local transcripts (e.g. Codex memories,
+cloud tasks) is not included.
+
 The app only reads local transcript storage. Keep the default localhost bind
 unless you are comfortable exposing your agent history on another interface.
 

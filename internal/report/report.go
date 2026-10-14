@@ -30,6 +30,9 @@ type Options struct {
 	Project   string
 	Breakdown bool // list per-model rows under each period
 	Sections  []string
+	// CostMultipliers is reported alongside Billed so readers know how it
+	// relates to Cost; Billed itself comes from the sessions.
+	CostMultipliers map[string]float64
 }
 
 type Row struct {
@@ -40,7 +43,8 @@ type Row struct {
 	CacheRead   int     `json:"cacheRead"`
 	CacheWrite  int     `json:"cacheWrite"`
 	Tokens      int     `json:"tokens"`
-	Cost        float64 `json:"cost"`
+	Cost        float64 `json:"cost"`                  // at API prices
+	Billed      float64 `json:"billed"`                // Cost scaled by per-agent cost multipliers
 	CostPartial bool    `json:"costPartial,omitempty"` // some tokens had no known price
 	Models      []*Row  `json:"models,omitempty"`
 
@@ -49,14 +53,15 @@ type Row struct {
 }
 
 type Report struct {
-	Group     string `json:"group"`
-	From      string `json:"from,omitempty"`
-	To        string `json:"to,omitempty"`
-	Total     *Row   `json:"total"`
-	Periods   []*Row `json:"periods,omitempty"`
-	Agents    []*Row `json:"agents,omitempty"`
-	Providers []*Row `json:"providers,omitempty"`
-	Models    []*Row `json:"models,omitempty"`
+	Group           string             `json:"group"`
+	CostMultipliers map[string]float64 `json:"costMultipliers,omitempty"`
+	From            string             `json:"from,omitempty"`
+	To              string             `json:"to,omitempty"`
+	Total           *Row               `json:"total"`
+	Periods         []*Row             `json:"periods,omitempty"`
+	Agents          []*Row             `json:"agents,omitempty"`
+	Providers       []*Row             `json:"providers,omitempty"`
+	Models          []*Row             `json:"models,omitempty"`
 }
 
 func (r *Row) addSession(key string) {
@@ -76,6 +81,7 @@ func (r *Row) addUsage(u store.ModelUsage) {
 	r.CacheWrite += u.CacheCreationTokens
 	r.Tokens = r.Input + r.Output + r.CacheRead + r.CacheWrite
 	r.Cost += u.Cost
+	r.Billed += u.Billed
 	if u.Tokens && !u.HasCost && tokens(u) > 0 {
 		r.CostPartial = true
 	}
@@ -114,7 +120,7 @@ func row(rows map[string]*Row, label string) *Row {
 // (loc) day they started on.
 func Build(sessions []store.Session, opts Options, loc *time.Location) *Report {
 	layout := map[string]string{"year": "2006", "month": "2006-01", "day": "2006-01-02"}[opts.Group]
-	rep := &Report{Group: opts.Group, Total: &Row{Label: "Total"}}
+	rep := &Report{Group: opts.Group, CostMultipliers: opts.CostMultipliers, Total: &Row{Label: "Total"}}
 	if !opts.From.IsZero() {
 		rep.From = opts.From.Format("2006-01-02")
 	}
@@ -144,7 +150,7 @@ func Build(sessions []store.Session, opts Options, loc *time.Location) *Report {
 			r.addSession(key)
 		}
 		for _, u := range s.Usage {
-			if tokens(u) == 0 && u.Cost == 0 {
+			if tokens(u) == 0 && u.Cost == 0 && u.Billed == 0 {
 				continue
 			}
 			provider, model := row(providers, providerLabel(u)), row(models, modelLabel(u))
@@ -239,7 +245,7 @@ func WriteText(w io.Writer, rep *Report, sections []string) error {
 			continue
 		}
 		fmt.Fprintf(&b, "\n%s\n", t.title)
-		cells := [][]string{{t.column, "Sessions", "Input", "Output", "Cache read", "Cache write", "Total", "Cost"}}
+		cells := [][]string{{t.column, "Sessions", "Input", "Output", "Cache read", "Cache write", "Total", "Cost", "Billed"}}
 		for _, r := range t.rows {
 			cells = append(cells, cellsFor(r.Label, r))
 			for i, m := range r.Models {
@@ -253,19 +259,21 @@ func WriteText(w io.Writer, rep *Report, sections []string) error {
 		cells = append(cells, nil, cellsFor("Total", rep.Total))
 		writeTable(&b, cells)
 	}
+	fmt.Fprintf(&b, "\nCost is at standard API prices; Billed applies cost multipliers (%s).\n", store.FormatCostMultipliers(rep.CostMultipliers))
 	if partial {
-		b.WriteString("\n* includes tokens from models without a known price\n")
+		b.WriteString("* includes tokens from models without a known price\n")
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
 
 func cellsFor(label string, r *Row) []string {
-	cost := fmtCost(r.Cost)
+	cost, billed := fmtCost(r.Cost), fmtCost(r.Billed)
 	if r.CostPartial {
 		cost += "*"
+		billed += "*"
 	}
-	return []string{label, fmt.Sprint(r.Sessions), fmtTokens(r.Input), fmtTokens(r.Output), fmtTokens(r.CacheRead), fmtTokens(r.CacheWrite), fmtTokens(r.Tokens), cost}
+	return []string{label, fmt.Sprint(r.Sessions), fmtTokens(r.Input), fmtTokens(r.Output), fmtTokens(r.CacheRead), fmtTokens(r.CacheWrite), fmtTokens(r.Tokens), cost, billed}
 }
 
 // writeTable left-aligns the first column and right-aligns the rest. A nil

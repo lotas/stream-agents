@@ -134,7 +134,7 @@ func onReady(idx *store.Index, baseURL string) {
 			return
 		}
 		now := time.Now()
-		systray.SetTitle(" " + fmtCost(s.Today.SummaryUsage, true) + " / " + fmtCost(s.Week.SummaryUsage, true))
+		systray.SetTitle(" " + fmtCost(s.Today.Cost, s.Today.CostPartial, true) + " / " + fmtCost(s.Week.Cost, s.Week.CostPartial, true))
 		systray.SetTooltip("stream-agents — updated " + now.Format("15:04"))
 		today.set("Today: "+fmtUsage(s.Today.SummaryUsage), statsURL(baseURL, "", s.Today))
 		setAgents(agents, "    ", baseURL, s.Today)
@@ -198,7 +198,7 @@ func fmtUsage(u server.SummaryUsage) string {
 	if u.Sessions == 1 {
 		sessions = "session"
 	}
-	return fmt.Sprintf("%s tokens · %s · %d %s", fmtTokens(u.Tokens), fmtCost(u, false), u.Sessions, sessions)
+	return fmt.Sprintf("%s tokens · %s (billed %s) · %d %s", fmtTokens(u.Tokens), fmtCost(u.Cost, u.CostPartial, false), fmtCost(u.Billed, u.CostPartial, false), u.Sessions, sessions)
 }
 
 // fmtTokens formats a token count compactly, e.g. 950, 12K, 1.2M.
@@ -216,12 +216,12 @@ func fmtTokens(n int) string {
 
 // fmtCost formats an estimated cost; short drops cents above $10. A trailing
 // "+" marks that some usage had no known price.
-func fmtCost(u server.SummaryUsage, short bool) string {
-	s := fmt.Sprintf("$%.2f", u.Cost)
-	if short && u.Cost >= 10 {
-		s = fmt.Sprintf("$%.0f", u.Cost)
+func fmtCost(cost float64, partial, short bool) string {
+	s := fmt.Sprintf("$%.2f", cost)
+	if short && cost >= 10 {
+		s = fmt.Sprintf("$%.0f", cost)
 	}
-	if u.CostPartial {
+	if partial {
 		s += "+"
 	}
 	return s

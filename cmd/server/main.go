@@ -54,12 +54,21 @@ func storeFlags(fs *flag.FlagSet) func() *store.Index {
 	claudeConfigDir := fs.String("claude-config-dir", filepath.Join(home, ".config", "claude", "projects"), "Claude projects directory (~/.config/claude/projects)")
 	codexDir := fs.String("codex-dir", filepath.Join(home, ".codex", "sessions"), "Codex sessions directory")
 	opencodeDir := fs.String("opencode-dir", filepath.Join(dataHome, "opencode"), "OpenCode data directory (containing opencode.db)")
+	costMultiplier := fs.String("cost-multiplier", os.Getenv("STREAM_AGENTS_COST_MULTIPLIER"),
+		"billed-to-API cost ratios as agent=factor,... overriding the defaults ("+store.FormatCostMultipliers(store.DefaultCostMultipliers)+"); env STREAM_AGENTS_COST_MULTIPLIER")
 	return func() *store.Index {
-		return store.NewIndex(
+		multipliers, err := store.ParseCostMultipliers(*costMultiplier)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		idx := store.NewIndex(
 			store.NewClaudeStore(*claudeDir, *claudeConfigDir),
 			store.NewCodexStore(*codexDir),
 			store.NewOpenCodeStore(*opencodeDir),
 		)
+		idx.CostMultipliers = multipliers
+		return idx
 	}
 }
 
