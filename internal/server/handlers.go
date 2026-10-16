@@ -650,6 +650,15 @@ func (h *handlers) handleHotJSON(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(hot)
 }
 
+// /notify polling: how often tracked files are checked for growth, how often
+// stores are re-listed for newly active sessions, and the keepalive period on
+// an otherwise silent stream.
+const (
+	notifyPollInterval      = time.Second
+	notifyRescanInterval    = 5 * time.Second
+	notifyKeepaliveInterval = 15 * time.Second
+)
+
 func (h *handlers) handleNotify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -695,15 +704,21 @@ func (h *handlers) handleNotify(w http.ResponseWriter, r *http.Request) {
 
 	addHotSessions()
 
-	ticker := time.NewTicker(500 * time.Millisecond)
+	// Growth of tracked files is a cheap stat each; finding newly hot
+	// sessions lists every store, so it runs less often.
+	ticker := time.NewTicker(notifyPollInterval)
 	defer ticker.Stop()
+	lastRescan, lastWrite := time.Now(), time.Now()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-ticker.C:
-			addHotSessions()
+		case now := <-ticker.C:
+			if now.Sub(lastRescan) >= notifyRescanInterval {
+				addHotSessions()
+				lastRescan = now
+			}
 
 			anyChange := false
 			for key, tf := range tracked {
@@ -723,9 +738,12 @@ func (h *handlers) handleNotify(w http.ResponseWriter, r *http.Request) {
 				tracked[key] = tf
 				anyChange = true
 			}
-			if !anyChange {
+			if anyChange {
+				lastWrite = now
+			} else if now.Sub(lastWrite) >= notifyKeepaliveInterval {
 				fmt.Fprintf(w, ": keepalive\n\n")
 				flusher.Flush()
+				lastWrite = now
 			}
 		}
 	}

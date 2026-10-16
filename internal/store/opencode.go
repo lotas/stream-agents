@@ -20,6 +20,29 @@ import (
 type OpenCodeStore struct {
 	dbPath string
 	mu     sync.Mutex
+	// cached is the last listing, valid while the database files' stamp is
+	// unchanged; re-reading every message is the expensive part of a listing.
+	cached []Session
+	stamp  openCodeStamp
+}
+
+// openCodeStamp identifies a version of the database by the size and mtime
+// of the main file and its write-ahead log, where live writes land first.
+type openCodeStamp struct {
+	dbSize, walSize int64
+	dbTime, walTime int64 // UnixNano
+}
+
+func (s *OpenCodeStore) currentStamp() (openCodeStamp, error) {
+	fi, err := os.Stat(s.dbPath)
+	if err != nil {
+		return openCodeStamp{}, err
+	}
+	st := openCodeStamp{dbSize: fi.Size(), dbTime: fi.ModTime().UnixNano()}
+	if wal, err := os.Stat(s.dbPath + "-wal"); err == nil {
+		st.walSize, st.walTime = wal.Size(), wal.ModTime().UnixNano()
+	}
+	return st, nil
 }
 
 // NewOpenCodeStore creates a store rooted at OpenCode's data directory (the
@@ -53,6 +76,27 @@ func (s *OpenCodeStore) ListSessions(ctx context.Context) ([]Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	stamp, err := s.currentStamp()
+	if os.IsNotExist(err) {
+		s.cached = nil
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if s.cached != nil && stamp == s.stamp {
+		return append([]Session(nil), s.cached...), nil
+	}
+	out, err := s.readSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.cached, s.stamp = out, stamp
+	return append([]Session(nil), out...), nil
+}
+
+// readSessions lists every session and aggregates its messages.
+func (s *OpenCodeStore) readSessions(ctx context.Context) ([]Session, error) {
 	db, err := s.open()
 	if os.IsNotExist(err) {
 		return nil, nil

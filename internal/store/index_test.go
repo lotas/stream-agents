@@ -95,3 +95,39 @@ func TestIndexSortedByModified(t *testing.T) {
 	}
 	_ = time.Time{}
 }
+
+func TestIndexListAllRecomputesOnChange(t *testing.T) {
+	claudeRoot := t.TempDir()
+	projDir := filepath.Join(claudeRoot, "-Users-test-myproject")
+	os.Mkdir(projDir, 0o755)
+	src, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "claude", "session.jsonl"))
+	path := filepath.Join(projDir, "test-0000-0000-0000-000000000001.jsonl")
+	os.WriteFile(path, src, 0o644)
+	idx := store.NewIndex(store.NewClaudeStore(claudeRoot))
+
+	find := func() store.Session {
+		t.Helper()
+		sessions, err := idx.ListAll(context.Background(), "", "")
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("ListAll = %d sessions, %v", len(sessions), err)
+		}
+		return sessions[0]
+	}
+	before := find()
+	if before.ActiveDuration != 11*time.Second {
+		t.Fatalf("ActiveDuration = %v, want 11s", before.ActiveDuration)
+	}
+
+	// Extend the transcript by a minute; the session must be re-derived.
+	last := []byte(`{"type":"user","timestamp":"2026-05-01T10:01:11Z","message":{"role":"user","content":"more"}}` + "\n")
+	os.WriteFile(path, append(src, last...), 0o644)
+	os.Chtimes(path, time.Now(), before.Modified.Add(time.Second))
+	if got := find().ActiveDuration; got != 71*time.Second {
+		t.Errorf("ActiveDuration after append = %v, want 71s", got)
+	}
+
+	idx.IdleCutoff = time.Nanosecond
+	if got := find().ActiveDuration; got != 0 {
+		t.Errorf("ActiveDuration = %v after shrinking the idle cutoff, want 0", got)
+	}
+}

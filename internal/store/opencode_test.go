@@ -137,3 +137,26 @@ func TestOpenCodeMissingDatabase(t *testing.T) {
 		t.Fatalf("LoadSession error = %v, want os.ErrNotExist", err)
 	}
 }
+
+func TestOpenCodeListSessionsSeesWrites(t *testing.T) {
+	root := buildOpenCodeFixture(t)
+	s := store.NewOpenCodeStore(root)
+	if _, err := s.ListSessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(root, "opencode.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE session SET title = 'A renamed and longer title'`); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := s.ListSessions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 || sessions[0].Title != "A renamed and longer title" {
+		t.Errorf("sessions after write = %+v, want the new title", sessions)
+	}
+}
