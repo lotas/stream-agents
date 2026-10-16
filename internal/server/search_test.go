@@ -49,7 +49,7 @@ func TestHandleSearch(t *testing.T) {
 	os.Mkdir(proj, 0o755)
 	src, _ := os.ReadFile(filepath.Join("..", "..", "testdata", "claude", "session.jsonl"))
 	os.WriteFile(filepath.Join(proj, "test-0000-0000-0000-000000000001.jsonl"), src, 0o644)
-	ts := httptest.NewServer(NewMux(store.NewIndex(store.NewClaudeStore(root))))
+	ts := httptest.NewServer(NewMux(store.NewIndex(store.NewClaudeStore(root)), Options{}))
 	defer ts.Close()
 
 	get := func(q string) string {

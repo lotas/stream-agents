@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	"stream-agents/internal/server"
@@ -21,7 +23,10 @@ func main() {
 		return
 	}
 
-	addr := flag.String("addr", "127.0.0.1:7777", "listen address")
+	var listen string
+	flag.StringVar(&listen, "listen", defaultListen, "comma-separated listen addresses, e.g. 0.0.0.0:7777 (all interfaces) or 127.0.0.1:7777,100.64.0.1:7777")
+	flag.StringVar(&listen, "addr", defaultListen, "deprecated alias for -listen")
+	allowRemoteUI := flag.Bool("allow-remote-ui", false, "serve the HTML pages and session data to non-loopback peers, not just /api/v1/")
 	newIndex := storeFlags(flag.CommandLine)
 	trayMode := flag.Bool("tray", false, "show today's usage in the menu bar / system tray")
 	idleCutoff := flag.Duration("idle-cutoff", 15*time.Minute, "maximum gap between events counted as active time")
@@ -29,17 +34,124 @@ func main() {
 	if *idleCutoff <= 0 {
 		log.Fatal("idle-cutoff must be positive")
 	}
+	cfg, err := loadServeConfig(listen)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	idx := newIndex()
 	idx.IdleCutoff = *idleCutoff
-	mux := server.NewMux(idx)
+	host, _ := os.Hostname()
+	mux := server.NewMux(idx, server.Options{
+		AllowRemoteUI: *allowRemoteUI,
+		Version:       buildVersion(),
+		Host:          host,
+	})
 
-	fmt.Printf("stream-agents listening on http://%s\n", *addr)
-	if !*trayMode {
-		log.Fatal(http.ListenAndServe(*addr, mux))
+	// Bind every address before serving any, so a bad one fails at startup.
+	var listeners []net.Listener
+	for _, addr := range cfg.addrs {
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		listeners = append(listeners, l)
+		fmt.Printf("stream-agents listening on http://%s\n", addr)
 	}
-	go func() { log.Fatal(http.ListenAndServe(*addr, mux)) }()
-	tray.Run(idx, "http://"+browseHost(*addr))
+	if cfg.remote {
+		ui := "UI loopback-only"
+		if *allowRemoteUI {
+			ui = "UI open to remote peers"
+		}
+		fmt.Printf("network access enabled: /api/v1/ open to the network, %s\n", ui)
+	}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	for _, l := range listeners[1:] {
+		go func() { log.Fatal(srv.Serve(l)) }()
+	}
+	if !*trayMode {
+		log.Fatal(srv.Serve(listeners[0]))
+	}
+	go func() { log.Fatal(srv.Serve(listeners[0])) }()
+	tray.Run(idx, "http://"+browseHost(cfg.browseAddr()))
+}
+
+const defaultListen = "127.0.0.1:7777"
+
+type serveConfig struct {
+	addrs  []string
+	remote bool // some address is not loopback
+}
+
+// browseAddr prefers a loopback address, which serves the full UI.
+func (c serveConfig) browseAddr() string {
+	for _, addr := range c.addrs {
+		if host, _, err := net.SplitHostPort(addr); err == nil && isLoopbackHost(host) {
+			return addr
+		}
+	}
+	return c.addrs[0]
+}
+
+// loadServeConfig parses the -listen list.
+func loadServeConfig(listen string) (serveConfig, error) {
+	var cfg serveConfig
+	for _, addr := range strings.Split(listen, ",") {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return cfg, fmt.Errorf("invalid -listen address %q: use host:port", addr)
+		}
+		cfg.addrs = append(cfg.addrs, addr)
+		cfg.remote = cfg.remote || !isLoopbackHost(host)
+	}
+	if len(cfg.addrs) == 0 {
+		return cfg, fmt.Errorf("-listen needs at least one address")
+	}
+	return cfg, nil
+}
+
+// isLoopbackHost reports whether host only accepts local connections.
+// Wildcards ("", 0.0.0.0, ::) and other names count as non-loopback.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// version is set with -ldflags "-X main.version=..."; otherwise it comes
+// from the module version or VCS revision embedded at build time.
+var version string
+
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v
+	}
+	var rev, dirty string
+	for _, s := range info.Settings {
+		switch {
+		case s.Key == "vcs.revision" && len(s.Value) >= 12:
+			rev = s.Value[:12]
+		case s.Key == "vcs.modified" && s.Value == "true":
+			dirty = "-dirty"
+		}
+	}
+	if rev == "" {
+		return "dev"
+	}
+	return rev + dirty
 }
 
 // storeFlags registers the transcript location flags on fs and returns a

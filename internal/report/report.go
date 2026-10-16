@@ -48,8 +48,25 @@ type Row struct {
 	CostPartial bool    `json:"costPartial,omitempty"` // some tokens had no known price
 	Models      []*Row  `json:"models,omitempty"`
 
-	sessions map[string]bool
-	models   map[string]*Row
+	// Agent, Provider and Model identify the rows of AgentModels.
+	Agent    string `json:"-"`
+	Provider string `json:"-"`
+	Model    string `json:"-"`
+
+	sessions    map[string]bool
+	models      map[string]*Row
+	agentModels map[string]*Row
+}
+
+// AgentModels returns a period's usage per agent and provider/model, sorted
+// by agent, then by cost.
+func (r *Row) AgentModels() []*Row {
+	return sorted(r.agentModels, func(a, b *Row) bool {
+		if a.Agent != b.Agent {
+			return a.Agent < b.Agent
+		}
+		return byCost(a, b)
+	})
 }
 
 type Report struct {
@@ -158,10 +175,15 @@ func Build(sessions []store.Session, opts Options, loc *time.Location) *Report {
 				period.models = map[string]*Row{}
 			}
 			periodModel := row(period.models, modelLabel(u))
-			for _, r := range []*Row{provider, model, periodModel} {
+			if period.agentModels == nil {
+				period.agentModels = map[string]*Row{}
+			}
+			agentModel := row(period.agentModels, s.Agent+"\x00"+modelLabel(u))
+			agentModel.Label, agentModel.Agent, agentModel.Provider, agentModel.Model = modelLabel(u), s.Agent, u.Provider, u.Model
+			for _, r := range []*Row{provider, model, periodModel, agentModel} {
 				r.addSession(key)
 			}
-			for _, r := range []*Row{rep.Total, period, agent, provider, model, periodModel} {
+			for _, r := range []*Row{rep.Total, period, agent, provider, model, periodModel, agentModel} {
 				r.addUsage(u)
 			}
 		}

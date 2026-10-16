@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -144,5 +145,32 @@ func TestBilled(t *testing.T) {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("output missing %q:\n%s", want, b.String())
 		}
+	}
+}
+
+func TestAgentModels(t *testing.T) {
+	sessions := append(testSessions(),
+		// Same provider/model as session a, but another agent and session.
+		store.Session{Agent: "opencode", ID: "e", Started: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC), Usage: []store.ModelUsage{
+			usage("anthropic", "claude-opus-5-5", 1000, 10, true),
+		}},
+		store.Session{Agent: "claude", ID: "f", Started: time.Date(2026, 10, 1, 13, 0, 0, 0, time.UTC), Usage: []store.ModelUsage{
+			usage("anthropic", "claude-opus-5-5", 1, .25, true),
+		}},
+	)
+	rep := Build(sessions, Options{Group: "day"}, time.UTC)
+	var got []string
+	for _, m := range rep.Periods[0].AgentModels() {
+		got = append(got, fmt.Sprintf("%s %s %s %d %g %d", m.Agent, m.Provider, m.Model, m.Input, m.Cost, m.Sessions))
+	}
+	want := []string{
+		"claude anthropic claude-opus-5-5 101 1.25 2",
+		"claude anthropic claude-haiku-5-5 50 0.5 1",
+		"codex openai gpt-5.5 200 2 1",
+		"codex openai  10 0 1",
+		"opencode anthropic claude-opus-5-5 1000 10 1",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("agent models:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

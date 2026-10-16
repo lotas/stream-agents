@@ -42,7 +42,7 @@ func TestStatsGrouping(t *testing.T) {
 }
 
 func TestStatsPage(t *testing.T) {
-	mux := NewMux(store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Project: "/test", Started: time.Date(2026, 1, 31, 23, 59, 0, 0, time.UTC)}}}))
+	mux := NewMux(store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Project: "/test", Started: time.Date(2026, 1, 31, 23, 59, 0, 0, time.UTC)}}}), Options{})
 	for _, tc := range []struct {
 		query    string
 		status   int
@@ -58,7 +58,7 @@ func TestStatsPage(t *testing.T) {
 		{"?from=2026-02-01&to=2026-01-01", 400, "start date"},
 	} {
 		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, httptest.NewRequest("GET", "/stats"+tc.query, nil))
+		mux.ServeHTTP(w, localRequest("GET", "/stats"+tc.query))
 		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
 			t.Fatalf("%s: %d %s", tc.query, w.Code, w.Body.String())
 		}
@@ -94,7 +94,7 @@ func TestActiveTimePages(t *testing.T) {
 	idx := store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Started: start, ActivityTimes: []time.Time{start, start.Add(10 * time.Minute)}}}})
 	for _, path := range []string{"/?date=all", "/stats"} {
 		w := httptest.NewRecorder()
-		NewMux(idx).ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		NewMux(idx, Options{}).ServeHTTP(w, localRequest("GET", path))
 		if w.Code != 200 || !strings.Contains(w.Body.String(), "Active time (est.)") || !strings.Contains(w.Body.String(), "10m 0s") {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
 		}

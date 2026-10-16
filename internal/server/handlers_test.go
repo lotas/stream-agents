@@ -34,7 +34,7 @@ func buildTestServer(t *testing.T) *httptest.Server {
 		store.NewClaudeStore(claudeRoot),
 		store.NewCodexStore(codexRoot),
 	)
-	return httptest.NewServer(server.NewMux(idx))
+	return httptest.NewServer(server.NewMux(idx, server.Options{}))
 }
 
 func TestHandleListReturns200(t *testing.T) {
@@ -183,9 +183,11 @@ func TestHandleCodexCompletedItems(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "rollout-2026-09-11T08-14-57-"+id+".jsonl"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	mux := server.NewMux(store.NewIndex(store.NewCodexStore(root)))
+	mux := server.NewMux(store.NewIndex(store.NewCodexStore(root)), server.Options{})
 	rr := httptest.NewRecorder()
-	mux.ServeHTTP(rr, httptest.NewRequest("GET", "/session/codex/"+id, nil))
+	req := httptest.NewRequest("GET", "/session/codex/"+id, nil)
+	req.RemoteAddr = "127.0.0.1:1234" // non-loopback peers only reach /api/v1/
+	mux.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rr.Code, rr.Body.String())
 	}

@@ -63,9 +63,9 @@ func TestBuildSummaryActive(t *testing.T) {
 }
 
 func TestSummaryJSON(t *testing.T) {
-	mux := NewMux(store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Started: time.Now(), InputTokens: 5, HasTokens: true}}}))
+	mux := NewMux(store.NewIndex(statsStore{[]store.Session{{Agent: "claude", Started: time.Now(), InputTokens: 5, HasTokens: true}}}), Options{})
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/summary.json", nil))
+	mux.ServeHTTP(w, localRequest("GET", "/api/summary.json"))
 	var s Summary
 	if err := json.Unmarshal(w.Body.Bytes(), &s); err != nil || w.Code != 200 {
 		t.Fatalf("%d %v %s", w.Code, err, w.Body.String())
