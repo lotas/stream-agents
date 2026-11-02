@@ -19,13 +19,13 @@ const (
 	maxUsageDays     = 400
 )
 
-// guard keeps non-loopback peers to /api/v1/ unless the UI is opted in, and
+// guard keeps non-loopback peers to /api/v1/ and publicPaths unless the UI is opted in, and
 // logs one line per /api/ request.
 func guard(next http.Handler, opts Options) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		local := isLoopbackPeer(r.RemoteAddr)
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			if !local && !opts.AllowRemoteUI {
+			if !local && !opts.AllowRemoteUI && !publicPaths[r.URL.Path] {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}

@@ -104,6 +104,8 @@ before listening on anything but localhost.
 Read-only JSON endpoints for other programs, e.g. a dashboard that collects
 spend from several machines:
 
+- `GET /llms.txt` (also `/llm.txt`) describes the whole HTTP API for LLM
+  agents ([llmstxt.org](https://llmstxt.org) format), with example responses.
 - `GET /api/v1/health` returns `{"ok":true,"version":"…","host":"…"}`.
 - `GET /api/v1/usage?days=31` returns daily aggregates for the last `days`
   local calendar days, including today (default 31, capped at 400). Each day
@@ -154,7 +156,7 @@ stream-agents -listen 0.0.0.0:7777                          # all interfaces
 stream-agents -listen 127.0.0.1:7777,100.101.102.103:7777   # Tailscale IP only
 ```
 
-Peers that are not on loopback only reach `/api/v1/*`. Everything else (HTML
+Peers that are not on loopback only reach `/api/v1/*` and `/llms.txt`. Everything else (HTML
 pages, transcript streams, `/hot.json`, `/api/summary.json`) answers them with
 `403` because it shows prompts and session content. Pass `-allow-remote-ui` to
 serve it to remote peers too. There is no CORS and no endpoint that writes or

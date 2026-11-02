@@ -1,0 +1,123 @@
+# stream-agents
+
+> Local web viewer and usage API for AI coding-agent transcripts (Claude Code, Codex, OpenCode) on one machine. It reads the local transcript stores, renders sessions as HTML, and serves daily token and cost aggregates as JSON so other programs (dashboards, menu bars, other machines) can collect agent spend.
+
+- Base URL: `http://<host>:7777` (the binary defaults to `127.0.0.1:7777`; `make run` / `make tray` listen on `0.0.0.0:7777`). `-listen` takes a comma-separated list of addresses.
+- Auth: none. Everything is read-only (GET/HEAD); there is no CORS and no endpoint that writes or runs anything.
+- Access: non-loopback peers reach only `/api/v1/*`, `/llms.txt` and `/llm.txt`. Every other path answers them `403 forbidden`, because it shows prompts and session content, unless the server runs with `-allow-remote-ui`. Loopback peers reach everything.
+- This file is also served at `/llm.txt`.
+
+## Network API (stable, for other programs)
+
+Fields may be added; existing ones are never renamed or removed.
+
+### GET /api/v1/health
+
+```json
+{
+  "ok": true,
+  "version": "440b010e11d9",
+  "host": "mac-mini"
+}
+```
+
+`version` is the module version or VCS revision; `host` is the OS hostname.
+
+### GET /api/v1/usage?days=N
+
+Daily aggregates for the last `N` local calendar days including today, oldest first. `days` defaults to 31 and is capped at 400. One entry per agent and model per day; days without usage have `"by": []`.
+
+```json
+{
+  "generated_at": "2026-11-02T09:27:39Z",
+  "timezone": "Europe/Berlin",
+  "utc_offset": "+01:00",
+  "currency": "USD",
+  "cost_multipliers": { "codex": 1.75 },
+  "days": [
+    {
+      "date": "2026-11-01",
+      "by": [
+        {
+          "agent": "codex",
+          "provider": "openai",
+          "model": "gpt-6-sol",
+          "input_tokens": 26152,
+          "output_tokens": 151,
+          "cache_read_tokens": 17792,
+          "cache_write_tokens": 0,
+          "cost": 0.057372,
+          "billed": 0.100402,
+          "cost_partial": false,
+          "sessions": 2
+        }
+      ]
+    },
+    { "date": "2026-11-02", "by": [] }
+  ]
+}
+```
+
+- `date`: local calendar day (`YYYY-MM-DD`) in `timezone`; `utc_offset` is the offset at `generated_at`.
+- `agent`: `claude`, `codex` or `opencode`. `provider` is empty for agents that don't record one (Claude, Codex). `model` is empty when unknown.
+- Tokens are raw token counts. `cost` is an estimate in USD at standard API prices (OpenCode's own stored cost when present). `billed` = `cost` × the agent's entry in `cost_multipliers` (unlisted agents are 1). Costs are rounded to 6 decimals.
+- `cost_partial: true` means some tokens used a model with no known price, so `cost` is too low.
+- `sessions`: sessions started that day that used this model. A session counts towards the local day it **started**, even if it ran past midnight.
+
+## Local-only endpoints (loopback, or `-allow-remote-ui`)
+
+Used by the web UI and the menu bar; shapes may change.
+
+### GET /api/summary.json
+
+Totals for the menu bar: `today`, `week` (last 7 days incl. today), `month` (current calendar month), `lastMonth`, `last3Months` (current and two previous months), plus currently `active` sessions. Note the camelCase keys, unlike `/api/v1`.
+
+```json
+{
+  "today": {"from":"2026-11-02","to":"2026-11-02","sessions":0,"tokens":0,"cost":0,"billed":0,"costPartial":false,"agents":[]},
+  "week": {"from":"2026-10-27","to":"2026-11-02","sessions":3,"tokens":65481,"cost":0.1005364,"billed":0.1759387,"costPartial":false,
+           "agents":[{"agent":"codex","sessions":3,"tokens":65481,"cost":0.1005364,"billed":0.1759387,"costPartial":false}]},
+  "month": {"from":"2026-11-01","to":"2026-11-02","sessions":2,"tokens":44095,"cost":0.0573724,"billed":0.1004017,"costPartial":false,"agents":[]},
+  "lastMonth": {"from":"2026-10-01","to":"2026-10-31","sessions":59,"tokens":4789071,"cost":5.1710876,"billed":9.0494033,"costPartial":false,"agents":[]},
+  "last3Months": {"from":"2026-09-01","to":"2026-11-02","sessions":167,"tokens":115131561,"cost":114.443,"billed":197.102,"costPartial":false,"agents":[]},
+  "active": [{"agent":"claude","title":"Fix the parser","url":"/session/claude/<id>"}]
+}
+```
+
+`tokens` here is the sum of input, output and cache tokens. Costs are not rounded.
+
+### GET /hot.json
+
+Recently active sessions for the "Active" panel, as a JSON array (`[]` when none).
+
+### HTML pages
+
+- `GET /` — session list by project and modified time. Query: `agent`, `project`, `date`.
+- `GET /session/{agent}/{id}` — one transcript rendered as HTML (`agent` is `claude`, `codex` or `opencode`).
+- `GET /search?q=...&agent=...` — full-text search over transcripts.
+- `GET /stats` — filterable year/month/day summaries, agent breakdown and activity heatmaps (groups by **UTC** day, unlike the API).
+- `GET /assets/...` — static CSS/JS.
+
+### Server-sent events
+
+- `GET /stream/{agent}/{id}?offset=N` — `text/event-stream` of new transcript records from byte offset `N` (Claude and Codex only).
+- `GET /notify` — `text/event-stream` that announces growth of recently active sessions; keepalive every 15 s.
+
+## Errors
+
+Plain-text bodies.
+
+- `400` — bad query, e.g. `days must be a positive integer`.
+- `403` — `forbidden`: a non-loopback peer asked for a local-only path.
+- `404` — unknown path (including any unknown `/api/...`) or session.
+- `405` — non-GET/HEAD on `/api/v1/*`; `Allow: GET, HEAD`.
+- `500` — transcripts could not be listed.
+
+## Gotchas
+
+- Costs are estimates from token counts and a small price table; they ignore historical price changes and fast/batch/regional/long-context modifiers. Unknown models have no cost. Usage that never reaches local transcripts (Codex memories, cloud tasks) is missing.
+- `billed` defaults to a 1.75× multiplier for Codex only. Override with `-cost-multiplier codex=1,claude=1.2` or `STREAM_AGENTS_COST_MULTIPLIER`; listed agents replace the defaults.
+- Days are computed in the server's time zone (`TZ` overrides it). `/api/v1/usage`, `/api/summary.json` and the `stats` CLI use local days; the HTML `/stats` page uses UTC days, so its numbers can differ near midnight.
+- `/api/v1/usage` matches `stream-agents stats -group day -breakdown` for the same days.
+- Each machine only sees its own transcripts: poll every machine and sum.
+- Requests reuse an in-memory index; only transcripts that changed since the last request are re-read, so polling every minute is cheap.
