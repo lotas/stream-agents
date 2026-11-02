@@ -11,7 +11,7 @@ type modelPrice struct {
 	Output     float64
 }
 
-// Prices checked 2026-10-08 against the providers' standard API pricing:
+// Prices checked 2026-11-02 against the providers' standard API pricing:
 //
 //	OpenAI: https://developers.openai.com/api/docs/pricing
 //	Anthropic: https://docs.anthropic.com/en/docs/about-claude/pricing
@@ -20,6 +20,7 @@ type modelPrice struct {
 var modelPrices = map[string]modelPrice{
 	"gpt-6-astra":       {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
 	"gpt-6.1-sol":       {Input: 2, CacheRead: .1, CacheWrite: 2.5, Output: 10},
+	"gpt-6.1-terra":     {Input: 1, CacheRead: .05, CacheWrite: 1.25, Output: 5},
 	"gpt-6-sol":         {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
 	"gpt-6-luna":        {Input: .1, CacheRead: .01, CacheWrite: .125, Output: .5},
 	"gpt-5.6":           {Input: 4, CacheRead: .4, CacheWrite: 5, Output: 20},
@@ -28,6 +29,8 @@ var modelPrices = map[string]modelPrice{
 	"gpt-5.6-luna":      {Input: .2, CacheRead: .02, CacheWrite: .25, Output: 1.2},
 	"gpt-5.5":           {Input: 5, CacheRead: .5, Output: 30},
 	"gpt-5.4":           {Input: 2.5, CacheRead: .25, Output: 15},
+	"gpt-5.4-mini":      {Input: .75, CacheRead: .075, Output: 4.5},
+	"gpt-5.4-nano":      {Input: .2, CacheRead: .02, Output: 1.25},
 	"gpt-5.3-codex":     {Input: 1.75, CacheRead: .175, Output: 14},
 	"gpt-5.2-codex":     {Input: 1.75, CacheRead: .175, Output: 14},
 	"gpt-5.2":           {Input: 1.75, CacheRead: .175, Output: 14},
@@ -36,9 +39,10 @@ var modelPrices = map[string]modelPrice{
 	"gpt-5-codex":       {Input: 1.25, CacheRead: .125, Output: 10},
 	"claude-fable-5-1":  {Input: 10, CacheRead: .25, CacheWrite: 12.5, Output: 50},
 	"claude-fable-5":    {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
+	"claude-mythos-5-1": {Input: 10, CacheRead: .25, CacheWrite: 12.5, Output: 50},
 	"claude-mythos-5":   {Input: 10, CacheRead: 1, CacheWrite: 12.5, Output: 50},
 	"claude-opus-5-5":   {Input: 4, CacheRead: .2, CacheWrite: 5, Output: 20},
-	"claude-sonnet-5-5": {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
+	"claude-sonnet-5-5": {Input: 2, CacheRead: .1, CacheWrite: 2.5, Output: 10},
 	"claude-haiku-5-5":  {Input: .1, CacheRead: .01, CacheWrite: .125, Output: .5},
 	"claude-opus-5":     {Input: 5, CacheRead: .5, CacheWrite: 6.25, Output: 25},
 	"claude-sonnet-5":   {Input: 2, CacheRead: .2, CacheWrite: 2.5, Output: 10},
@@ -74,6 +78,7 @@ func lookupModelPrice(model string) (modelPrice, bool) {
 		"claude-opus-5-5",
 		"claude-sonnet-5-5",
 		"claude-haiku-5-5",
+		"claude-mythos-5-1",
 		"claude-fable-5",
 		"claude-mythos-5",
 		"claude-opus-5",
