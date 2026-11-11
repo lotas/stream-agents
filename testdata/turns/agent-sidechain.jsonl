@@ -1,0 +1,2 @@
+{"isSidechain":true,"entrypoint":"cli","type":"user","message":{"role":"user","content":"Explore the repo"},"timestamp":"2026-11-11T10:00:00Z","sessionId":"S"}
+{"isSidechain":true,"entrypoint":"cli","type":"assistant","message":{"model":"claude-haiku-5-5","stop_reason":"end_turn","content":[{"type":"text","text":"Found it"}]},"timestamp":"2026-11-11T10:00:09Z","sessionId":"S"}

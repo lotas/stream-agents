@@ -145,13 +145,14 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	scanner.Buffer(make([]byte, 1<<20), maxTranscriptLine)
 	count := 0
 	var firstTime, lastTime time.Time
 	var currentModel string
 	var models []string
 	modelSeen := make(map[string]bool)
 	var previousUsage codexTokenUsage
+	var turn codexTurn
 	for scanner.Scan() {
 		count++
 		var line struct {
@@ -176,7 +177,10 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 					Total *codexTokenUsage `json:"total_token_usage"`
 				} `json:"info"`
 			}
-			if json.Unmarshal(line.Payload, &event) == nil && event.Type == "token_count" && event.Info.Total != nil {
+			if json.Unmarshal(line.Payload, &event) == nil {
+				turn.observe(event.Type, line.Timestamp)
+			}
+			if event.Type == "token_count" && event.Info.Total != nil {
 				// Codex reports cumulative totals; repeated events must not be summed.
 				u := event.Info.Total
 				sess.HasTokens = true
@@ -209,10 +213,13 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 		}
 		if line.Type == "session_meta" {
 			var meta struct {
-				CWD string `json:"cwd"`
+				CWD        string          `json:"cwd"`
+				Originator string          `json:"originator"`
+				Source     json.RawMessage `json:"source"`
 			}
 			json.Unmarshal(line.Payload, &meta)
 			sess.Project = meta.CWD
+			sess.Sidechain = codexDriven(meta.Originator, meta.Source)
 		}
 		if sess.Title == "" {
 			for _, msg := range ParseCodexJSONLLine(scanner.Bytes()) {
@@ -228,12 +235,29 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 		}
 	}
 	sess.Model = strings.Join(models, ", ")
+	turn.Model = currentModel
+	sess.Turn = turn.TurnState
 	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {
 		sess.Duration = lastTime.Sub(firstTime)
 	}
 	return sess
+}
+
+// codexDriven reports whether a rollout was run by another program rather
+// than a person: `codex exec`, a subagent (source is an object such as
+// {"subagent": ...}), or a client that is not Codex's own, such as the Codex
+// plugin inside Claude Code (originator "Claude Code").
+func codexDriven(originator string, source json.RawMessage) bool {
+	var src string
+	if len(source) > 0 && json.Unmarshal(source, &src) != nil {
+		return true
+	}
+	if src == "exec" {
+		return true
+	}
+	return originator != "" && !strings.HasPrefix(strings.ToLower(originator), "codex")
 }
 
 func parseCodexJSONL(fpath string) ([]Message, error) {
@@ -249,7 +273,7 @@ func parseCodexJSONL(fpath string) ([]Message, error) {
 func ParseCodexMessages(r io.Reader) ([]Message, error) {
 	var msgs []Message
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 4<<20), 4<<20)
+	scanner.Buffer(make([]byte, 1<<20), maxTranscriptLine)
 	for scanner.Scan() {
 		msgs = append(msgs, ParseCodexJSONLLine(scanner.Bytes())...)
 	}

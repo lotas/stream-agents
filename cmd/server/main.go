@@ -22,6 +22,10 @@ func main() {
 		runStats(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "hook" {
+		runHook(os.Args[2:])
+		return
+	}
 
 	var listen string
 	flag.StringVar(&listen, "listen", defaultListen, "comma-separated listen addresses, e.g. 0.0.0.0:7777 (all interfaces) or 127.0.0.1:7777,100.64.0.1:7777")
@@ -29,6 +33,7 @@ func main() {
 	allowRemoteUI := flag.Bool("allow-remote-ui", false, "serve the HTML pages and session data to non-loopback peers, not just /api/v1/")
 	newIndex := storeFlags(flag.CommandLine)
 	trayMode := flag.Bool("tray", false, "show today's usage in the menu bar / system tray")
+	stateDir := stateDirFlag(flag.CommandLine)
 	idleCutoff := flag.Duration("idle-cutoff", 15*time.Minute, "maximum gap between events counted as active time")
 	flag.Parse()
 	if *idleCutoff <= 0 {
@@ -41,6 +46,7 @@ func main() {
 
 	idx := newIndex()
 	idx.IdleCutoff = *idleCutoff
+	idx.SetHookStateDir(*stateDir)
 	host, _ := os.Hostname()
 	mux := server.NewMux(idx, server.Options{
 		AllowRemoteUI: *allowRemoteUI,

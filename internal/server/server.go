@@ -78,6 +78,7 @@ func routes(idx *store.Index, opts Options) []route {
 		f("/api/summary.json", h.handleSummaryJSON),
 		f("/api/v1/health", api.handleHealth),
 		f("/api/v1/usage", api.handleUsage),
+		f("/api/v1/sessions", api.handleSessions),
 		f("/api/", http.NotFound),
 		f("/llms.txt", handleLLMsTxt),
 		f("/llm.txt", handleLLMsTxt),

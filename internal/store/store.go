@@ -28,6 +28,14 @@ type Session struct {
 	OutputTokens        int
 	CacheReadTokens     int
 	Usage               []ModelUsage // per-model token usage, in first-use order
+	// Turn is where the latest turn stands, read from the transcript.
+	Turn TurnState
+	// Sidechain marks transcripts that are not sessions of their own:
+	// subagents, and agent runs driven by another program (codex exec, Codex
+	// started by Claude Code). They never count as active sessions.
+	Sidechain bool
+	// entrypoint is how a Claude session was started ("cli", "sdk-cli", ...).
+	entrypoint string
 }
 
 // ModelUsage is the usage a session recorded against one provider/model.
@@ -93,3 +101,8 @@ func sortSessionsByModified(sessions []Session) {
 		return sessions[i].Modified.After(sessions[j].Modified)
 	})
 }
+
+// maxTranscriptLine bounds one JSONL record. Records with inlined images or
+// large tool output pass 1 MB, and a scanner stops at the first record over
+// its limit, which would hide everything after it.
+const maxTranscriptLine = 64 << 20

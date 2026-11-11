@@ -106,32 +106,42 @@ func (s *OpenCodeStore) readSessions(ctx context.Context) ([]Session, error) {
 	}
 	defer db.Close()
 
+	// parent_id marks subagent sessions; old databases have no such column.
+	parentCol := "''"
+	if hasColumn(ctx, db, "session", "parent_id") {
+		parentCol = "COALESCE(parent_id, '')"
+	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, directory, title, time_created, time_updated
+		SELECT id, directory, title, time_created, time_updated, `+parentCol+`
 		FROM session`)
 	if err != nil {
 		return nil, fmt.Errorf("read OpenCode sessions: %w", err)
 	}
 
 	index := make(map[string]Session)
+	parents := make(map[string]string)
 	models := make(map[string][]string)
 	modelSeen := make(map[string]map[string]bool)
 	for rows.Next() {
-		var id, project, title string
+		var id, project, title, parent string
 		var created, updated int64
-		if err := rows.Scan(&id, &project, &title, &created, &updated); err != nil {
+		if err := rows.Scan(&id, &project, &title, &created, &updated, &parent); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		sess := Session{
-			Agent:    "opencode",
-			ID:       id,
-			Project:  project,
-			Title:    title,
-			Started:  unixMilli(created),
-			Modified: unixMilli(updated),
+			Agent:     "opencode",
+			ID:        id,
+			Project:   project,
+			Title:     title,
+			Started:   unixMilli(created),
+			Modified:  unixMilli(updated),
+			Sidechain: parent != "",
 		}
 		index[id] = sess
+		if parent != "" {
+			parents[id] = parent
+		}
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -170,6 +180,7 @@ func (s *OpenCodeStore) readSessions(ctx context.Context) ([]Session, error) {
 		if !completedAt.IsZero() && !completedAt.Equal(createdAt) {
 			sess.ActivityTimes = append(sess.ActivityTimes, completedAt)
 		}
+		openCodeTurn(&sess.Turn, data, createdAt, completedAt)
 		if data.Tokens != nil {
 			sess.HasTokens = true
 			sess.InputTokens += data.Tokens.Input
@@ -234,10 +245,37 @@ func (s *OpenCodeStore) readSessions(ctx context.Context) ([]Session, error) {
 			}
 		}
 		index[id] = sess
+	}
+	// A parent waits on its running subagents.
+	for id, parent := range parents {
+		child := index[id]
+		p, ok := index[parent]
+		if ok && child.Turn.State == StateWorking && child.Turn.LastActivity.After(p.Turn.SubagentActivity) {
+			p.Turn.SubagentActivity = child.Turn.LastActivity
+			index[parent] = p
+		}
+	}
+	for _, sess := range index {
 		out = append(out, sess)
 	}
 	sortSessionsByModified(out)
 	return out, nil
+}
+
+// hasColumn reports whether table has column.
+func hasColumn(ctx context.Context, db *sql.DB, table, column string) bool {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil && name == column {
+			return true
+		}
+	}
+	return false
 }
 
 // OpenCode sessions are rows in a shared database rather than independently
@@ -312,6 +350,7 @@ func (s *OpenCodeStore) LoadSession(ctx context.Context, id string) ([]Message, 
 
 type openCodeMessageData struct {
 	Role       string   `json:"role"`
+	Finish     string   `json:"finish"`
 	ModelID    string   `json:"modelID"`
 	ProviderID string   `json:"providerID"`
 	Cost       *float64 `json:"cost"`

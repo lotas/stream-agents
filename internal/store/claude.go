@@ -27,9 +27,10 @@ type claudeEntry struct {
 
 // ClaudeStore scans one or more Claude projects directories and serves transcripts.
 type ClaudeStore struct {
-	roots []string
-	mu    sync.Mutex
-	index map[string]claudeEntry
+	roots    []string
+	mu       sync.Mutex
+	index    map[string]claudeEntry
+	registry claudeRegistry
 }
 
 func NewClaudeStore(roots ...string) *ClaudeStore {
@@ -123,11 +124,14 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	scanner.Buffer(make([]byte, 1<<20), maxTranscriptLine)
 	count := 0
 	var firstTime, lastTime time.Time
 	var models []string
 	modelSeen := make(map[string]bool)
+	var turn claudeTurn
+	sidechainKnown := false
+	aiTitle := "" // Claude Code's generated title, newest wins
 	for scanner.Scan() {
 		count++
 		var raw map[string]json.RawMessage
@@ -138,8 +142,8 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 		if err := json.Unmarshal(raw["type"], &typ); err != nil {
 			continue
 		}
+		var ts time.Time
 		if tsRaw, ok := raw["timestamp"]; ok {
-			var ts time.Time
 			if json.Unmarshal(tsRaw, &ts) == nil && !ts.IsZero() {
 				if firstTime.IsZero() {
 					firstTime = ts
@@ -148,6 +152,18 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 				sess.ActivityTimes = append(sess.ActivityTimes, ts)
 			}
 		}
+		if sc, ok := raw["isSidechain"]; ok && !sidechainKnown {
+			// Old Claude versions wrote subagents as top-level agent-*.jsonl
+			// files whose records are all sidechain records.
+			sidechainKnown = true
+			sess.Sidechain = jsonBool(sc)
+		}
+		if sess.entrypoint == "" {
+			if ep, ok := raw["entrypoint"]; ok {
+				_ = json.Unmarshal(ep, &sess.entrypoint)
+			}
+		}
+		turn.observe(typ, raw, ts)
 		if typ == "user" && sess.Project == ClaudeDecodeProject(dirName) {
 			var cwd string
 			if cwdRaw, ok := raw["cwd"]; ok {
@@ -157,12 +173,17 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 				}
 			}
 		}
-		if typ == "user" && sess.Title == "" {
-			if text := claudeExtractUserText(raw); text != "" {
-				if runes := []rune(text); len(runes) > 120 {
-					text = string(runes[:120]) + "…"
-				}
-				sess.Title = text
+		if typ == "ai-title" {
+			var rec struct {
+				AITitle string `json:"aiTitle"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &rec) == nil && rec.AITitle != "" {
+				aiTitle = rec.AITitle
+			}
+		}
+		if typ == "user" && sess.Title == "" && !jsonBool(raw["isMeta"]) {
+			if text := claudeExtractUserText(raw); text != "" && !claudeWrapperText(text) {
+				sess.Title = truncateTitle(text)
 			}
 		}
 		if typ == "assistant" {
@@ -207,12 +228,39 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 		}
 	}
 	sess.Model = strings.Join(models, ", ")
+	if aiTitle != "" {
+		sess.Title = truncateTitle(aiTitle)
+	}
+	sess.Turn = turn.TurnState
+	// SDK runs (claude -p, Agent SDK programs) have no one waiting on them.
+	if strings.HasPrefix(sess.entrypoint, "sdk") {
+		sess.Sidechain = true
+	}
 	sess.Started = firstTime
 	sess.MessageCount = count
 	if !firstTime.IsZero() && lastTime.After(firstTime) {
 		sess.Duration = lastTime.Sub(firstTime)
 	}
 	return sess
+}
+
+// claudeWrapperText reports whether a user record's text is Claude Code
+// plumbing (slash-command echoes, their output, caveats) rather than a prompt.
+func claudeWrapperText(text string) bool {
+	text = strings.TrimSpace(text)
+	for _, prefix := range []string{"<local-command-", "<command-name>", "<command-message>", "<bash-input>", "<bash-stdout>", "<bash-stderr>"} {
+		if strings.HasPrefix(text, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func truncateTitle(text string) string {
+	if runes := []rune(text); len(runes) > 120 {
+		return string(runes[:120]) + "…"
+	}
+	return text
 }
 
 func claudeExtractUserText(raw map[string]json.RawMessage) string {
@@ -257,7 +305,7 @@ func parseClaudeJSONL(fpath string) ([]Message, error) {
 func ParseClaudeMessages(r io.Reader) ([]Message, error) {
 	var msgs []Message
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 4<<20), 4<<20)
+	scanner.Buffer(make([]byte, 1<<20), maxTranscriptLine)
 	for scanner.Scan() {
 		msgs = append(msgs, ParseClaudeJSONLLine(scanner.Bytes())...)
 	}

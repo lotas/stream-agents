@@ -1,8 +1,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestDefaultListenIsLoopback(t *testing.T) {
@@ -41,5 +45,25 @@ func TestLoadServeConfigAddrs(t *testing.T) {
 		if _, err := loadServeConfig(bad); err == nil {
 			t.Errorf("%q: want error", bad)
 		}
+	}
+}
+
+func TestApplyHookWritesState(t *testing.T) {
+	dir := t.TempDir()
+	payload := `{"session_id":"abc","transcript_path":"/x.jsonl","cwd":"/p","permission_mode":"default","hook_event_name":"Notification","message":"Claude needs your permission to use Bash","title":"Permission needed","notification_type":"permission_prompt"}`
+	if err := applyHook(strings.NewReader(payload), dir, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "claude", "abc.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyHook(strings.NewReader(`{"session_id":"abc","hook_event_name":"Stop","stop_hook_active":false}`), dir, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "claude", "abc.json")); !os.IsNotExist(err) {
+		t.Fatalf("state after Stop: %v", err)
+	}
+	if err := applyHook(strings.NewReader("not json"), dir, time.Now()); err == nil {
+		t.Error("bad payload: want error")
 	}
 }

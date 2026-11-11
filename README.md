@@ -143,6 +143,68 @@ spend from several machines:
   since the last request are re-read.
 - Fields may be added; existing ones are not renamed or removed.
 
+`GET /api/v1/sessions` lists the agent sessions that are working or waiting
+for you right now, waiting ones first, e.g. for an attention light:
+
+```json
+{
+  "generated_at": "2026-11-11T10:15:02Z",
+  "host": "mac-mini",
+  "sessions": [
+    { "agent": "claude", "id": "…", "project": "carthing", "title": "Fix the parser",
+      "model": "claude-fable-5-2", "state": "waiting", "waiting_reason": "turn_done",
+      "since": "2026-11-11T10:12:40Z", "last_activity": "2026-11-11T10:12:40Z" }
+  ]
+}
+```
+
+State comes from the transcripts (a finished turn means `waiting`). Subagents
+and program-driven runs (`claude -p`, `codex exec`) are left out. Claude Code
+terminal sessions count while their process runs (Claude's own
+`~/.claude/sessions` registry); other sessions drop out 10 min after their
+last activity when working and 30 min after the turn ended when waiting.
+`/llms.txt` has the exact rules.
+
+#### Permission prompts (optional Claude Code hook)
+
+A transcript can't show that Claude is blocked on a permission prompt (it
+looks like a running tool), so such a session reports `working`. With
+`stream-agents hook` installed as a Claude Code hook, it reports
+`"state": "waiting", "waiting_reason": "permission"` instead. The hook reads
+the event JSON on stdin, writes or removes a small file per session under
+`~/.local/state/stream-agents/claude/` (`-state-dir` or
+`STREAM_AGENTS_STATE_DIR` on both the hook and the server), prints nothing
+and always exits 0, so it never changes what Claude does. It takes about 3 ms,
+so the hooks run synchronously, which keeps "set" and "clear" in order.
+
+Add this to `~/.claude/settings.json` (merge it into an existing `"hooks"`
+object; use the absolute path of your binary):
+
+```json
+{
+  "hooks": {
+    "PermissionRequest":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "Notification":       [{ "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|elicitation_complete|elicitation_response",
+                             "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "PostToolUse":        [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "UserPromptSubmit":   [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "Stop":               [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "SubagentStop":       [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }],
+    "SessionEnd":         [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/stream-agents hook", "timeout": 5 }] }]
+  }
+}
+```
+
+`PermissionRequest` marks the prompt as soon as the dialog opens;
+`Notification` (`permission_prompt`, about 6 s later, and MCP elicitation
+dialogs) is the fallback. The other events clear it: per subagent for tool
+events (hooks inside a subagent carry its `agent_id`), for the whole session
+on a new prompt, `Stop` or `SessionEnd`. The server also ignores a recorded
+prompt once the transcript has anything newer (an answered or denied prompt
+is followed by a tool result), so a missed "clear" can't leave a session
+stuck on `permission`. Files of sessions that crashed are pruned after 24 h.
+
 ### Listening beyond localhost
 
 `-listen` takes a comma-separated list of addresses (`-addr` is an alias).
@@ -169,6 +231,7 @@ port, so only listen on networks you trust (your LAN or tailnet).
 ```sh
 curl http://mac-mini:7777/api/v1/health
 curl "http://mac-mini:7777/api/v1/usage?days=7"
+curl http://mac-mini:7777/api/v1/sessions
 ```
 
 ### Running under launchd (macOS)

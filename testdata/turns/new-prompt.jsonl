@@ -1,0 +1,9 @@
+{"type":"ai-title","aiTitle":"Fix the parser","sessionId":"S"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"user","message":{"role":"user","content":"Fix the parser"},"timestamp":"2026-11-11T10:00:00Z"}
+{"type":"attachment","timestamp":"2026-11-11T10:00:01Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"assistant","message":{"model":"claude-fable-5-2","stop_reason":"tool_use","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]},"timestamp":"2026-11-11T10:00:05Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]},"timestamp":"2026-11-11T10:00:06Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"assistant","message":{"model":"claude-fable-5-2","stop_reason":"end_turn","content":[{"type":"text","text":"Done."}]},"timestamp":"2026-11-11T10:00:10Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"system","subtype":"stop_hook_summary","timestamp":"2026-11-11T10:00:11Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"system","subtype":"turn_duration","durationMs":11000,"timestamp":"2026-11-11T10:00:12Z"}
+{"isSidechain":false,"entrypoint":"cli","cwd":"/Users/test/proj","sessionId":"S","type":"user","message":{"role":"user","content":[{"type":"text","text":"Now add a test"}]},"timestamp":"2026-11-11T10:05:00Z"}

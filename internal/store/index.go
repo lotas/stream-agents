@@ -16,6 +16,8 @@ type Index struct {
 	// cost; agents not listed bill at API prices.
 	CostMultipliers map[string]float64
 
+	hooks *hookStates // nil without a hook state dir
+
 	mu sync.Mutex
 	// derived caches each session with its activity and billing filled in,
 	// keyed by agent and ID, so unchanged sessions skip the recomputation.
@@ -36,6 +38,10 @@ type derivedSession struct {
 func NewIndex(stores ...Store) *Index {
 	return &Index{stores: stores, IdleCutoff: 15 * time.Minute, CostMultipliers: DefaultCostMultipliers}
 }
+
+// SetHookStateDir makes ActiveSessions read the pending permission prompts
+// that `stream-agents hook` records under dir; "" turns that off.
+func (idx *Index) SetHookStateDir(dir string) { idx.hooks = newHookStates(dir) }
 
 // CostMultiplier returns the billed-to-API cost ratio for agent.
 func (idx *Index) CostMultiplier(agent string) float64 {
