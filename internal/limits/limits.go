@@ -20,10 +20,15 @@ type Response struct {
 	Host        string `json:"host"`
 	// Available is false when no .claude.json with a usage cache was found;
 	// everything below is then null or empty.
-	Available       bool            `json:"available"`
-	Source          string          `json:"source"`      // file read, with the home dir as ~; "" if none
-	FetchedAt       *string         `json:"fetched_at"`  // RFC 3339 UTC, when Claude Code fetched the numbers
-	AgeSeconds      *int64          `json:"age_seconds"` // generated_at - fetched_at
+	Available bool `json:"available"`
+	// Origin is where the five_hour/seven_day/session numbers come from:
+	// "statusline" (a running Claude Code session), "cache" or "".
+	Origin          string          `json:"origin"`
+	FetchedAt       *string         `json:"fetched_at"`       // RFC 3339 UTC, when Origin's numbers were current
+	AgeSeconds      *int64          `json:"age_seconds"`      // generated_at - fetched_at
+	StatuslineAt    *string         `json:"statusline_at"`    // last report from a running session
+	CacheFetchedAt  *string         `json:"cache_fetched_at"` // when Claude Code last fetched its usage cache
+	Source          string          `json:"source"`           // cache file read, with the home dir as ~; "" if none
 	FiveHour        *Window         `json:"five_hour"`
 	SevenDay        *Window         `json:"seven_day"`
 	SevenDayOpus    *Window         `json:"seven_day_opus"`
@@ -102,10 +107,61 @@ func Candidates(home, configDirEnv string, projectRoots []string) []string {
 	return out
 }
 
-// Read builds the response from the file among paths whose cache has the
-// newest fetchedAtMs. It never fails: unreadable files and odd shapes are
-// skipped.
-func Read(paths []string, now time.Time, host, home string) Response {
+// Sources are where Read looks.
+type Sources struct {
+	ClaudeJSON []string // .claude.json candidates; the newest fetchedAtMs wins
+	Statusline string   // LiveFile written by `stream-agents statusline`; "" for none
+}
+
+// Read builds the response from Claude Code's usage cache and, where newer,
+// the rate limits a running session reported through its status line. It
+// never fails: unreadable files and odd shapes are skipped.
+func Read(src Sources, now time.Time, host, home string) Response {
+	out := readCache(src.ClaudeJSON, now, host, home)
+	live, ok := Response{}, false
+	if src.Statusline != "" {
+		var rec liveRecord
+		if rec, ok = readLive(src.Statusline); ok {
+			live.FiveHour, live.SevenDay = rec.windows(now)
+			ok = live.FiveHour != nil || live.SevenDay != nil
+			if ok {
+				s := stamp(rec.RecordedAt)
+				out.StatuslineAt = &s
+			}
+		}
+		if ok && (out.CacheFetchedAt == nil || *out.StatuslineAt > *out.CacheFetchedAt) {
+			out.Available, out.Origin, out.FetchedAt = true, "statusline", out.StatuslineAt
+			if live.FiveHour != nil {
+				out.FiveHour = live.FiveHour
+				w := *live.FiveHour
+				out.Session = &w
+				setLimit(out.Limits, "session", live.FiveHour)
+			}
+			if live.SevenDay != nil {
+				out.SevenDay = live.SevenDay
+				setLimit(out.Limits, "weekly_all", live.SevenDay)
+			}
+		}
+	}
+	if out.FetchedAt != nil {
+		if t, err := time.Parse(time.RFC3339, *out.FetchedAt); err == nil {
+			age := int64(now.Sub(t).Seconds())
+			out.AgeSeconds = &age
+		}
+	}
+	return out
+}
+
+// setLimit updates the limits entry of kind with a newer reading.
+func setLimit(limits []Limit, kind string, w *Window) {
+	for i := range limits {
+		if limits[i].Kind == kind {
+			limits[i].Percent, limits[i].ResetsAt, limits[i].Reset = w.Percent, w.ResetsAt, w.Reset
+		}
+	}
+}
+
+func readCache(paths []string, now time.Time, host, home string) Response {
 	out := Response{GeneratedAt: stamp(now), Host: host, Limits: []Limit{}, WeeklyBreakdown: []BreakdownItem{}}
 	var best map[string]any
 	var bestAt float64 = -1
@@ -122,11 +178,10 @@ func Read(paths []string, now time.Time, host, home string) Response {
 	if best == nil {
 		return out
 	}
-	out.Available = true
+	out.Available, out.Origin = true, "cache"
 	if bestAt > 0 {
-		f := time.UnixMilli(int64(bestAt))
-		s, age := stamp(f), int64(now.Sub(f).Seconds())
-		out.FetchedAt, out.AgeSeconds = &s, &age
+		s := stamp(time.UnixMilli(int64(bestAt)))
+		out.FetchedAt, out.CacheFetchedAt = &s, &s
 	}
 	u, _ := best["utilization"].(map[string]any)
 	out.FiveHour = window(u["five_hour"], now)

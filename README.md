@@ -169,27 +169,41 @@ last activity when working and 30 min after the turn ended when waiting.
 #### Claude subscription limits
 
 `GET /api/v1/limits` serves the Claude plan limits that Claude Code's `/usage`
-shows (5-hour session, weekly, per-model weekly), read from the cache Claude
-Code keeps in `.claude.json` (`cachedUsageUtilization`); the server never calls
-Anthropic itself:
+shows (5-hour session, weekly, per-model weekly). The server never calls
+Anthropic; it uses whichever of two local sources is newer:
+
+- **Live, from running sessions** (recommended): Claude Code passes the
+  current `rate_limits` to its status line command after every API response.
+  `stream-agents statusline` records them and then runs your own status line
+  command, if any, with the same input:
+
+  ```json
+  { "statusLine": { "type": "command", "command": "/usr/local/bin/stream-agents statusline foxtail" } }
+  ```
+
+  (in `~/.claude/settings.json`; drop `foxtail` if you have no status line, in
+  which case nothing is shown). It writes `<state dir>/limits.json`, the same
+  state dir as the hook below.
+- **Claude Code's usage cache** (`cachedUsageUtilization` in `.claude.json`):
+  only refreshed when Claude Code fetches usage itself, mainly on `/usage`, so
+  it is often hours old. It's the only source of the per-model weekly limits
+  and the weekly breakdown. It's an undocumented internal format, so every
+  field is optional.
 
 ```json
 {
-  "generated_at": "2026-11-11T19:30:00Z", "host": "mac-mini", "available": true,
-  "source": "~/.claude.json", "fetched_at": "2026-11-11T19:10:32Z", "age_seconds": 1168,
-  "five_hour": { "percent": 0, "resets_at": null, "reset": false },
-  "seven_day": { "percent": 12, "resets_at": "2026-11-11T20:00:00Z", "reset": false },
-  "session":   { "percent": 0, "resets_at": null, "reset": false },
+  "generated_at": "2026-11-11T22:14:44Z", "host": "mac-mini", "available": true,
+  "origin": "statusline", "fetched_at": "2026-11-11T22:14:40Z", "age_seconds": 4,
+  "five_hour": { "percent": 31, "resets_at": "2026-11-12T00:14:40Z", "reset": false },
+  "seven_day": { "percent": 13, "resets_at": "2026-11-18T20:00:00Z", "reset": false },
+  "session":   { "percent": 31, "resets_at": "2026-11-12T00:14:40Z", "reset": false },
   "limits": [ { "kind": "weekly_scoped", "group": "weekly", "percent": 14, "model": "Fable", "…": "…" } ],
   "…": "…"
 }
 ```
 
-The numbers are only as fresh as `fetched_at` (Claude Code refreshes them while
-it runs). With several Claude config dirs, the newest fetch wins. The cache is
-an undocumented internal format, so every field is optional: missing or renamed
-keys come out as `null`, and without a cache the endpoint answers
-`"available": false` rather than an error. `/llms.txt` has every field.
+Without either source the endpoint answers `"available": false` rather than
+an error. `/llms.txt` has every field.
 
 #### Permission prompts (optional Claude Code hook)
 

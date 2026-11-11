@@ -17,8 +17,8 @@ func f(v float64) *float64 { return &v }
 
 func TestReadRealCache(t *testing.T) {
 	now := time.Date(2026, 11, 11, 19, 30, 0, 0, time.UTC)
-	got := Read([]string{"/nonexistent/.claude.json", fixture}, now, "mac-mini", "")
-	if !got.Available || got.FetchedAt == nil || *got.FetchedAt != "2026-11-11T19:10:32Z" || *got.AgeSeconds != 1167 {
+	got := Read(Sources{ClaudeJSON: []string{"/nonexistent/.claude.json", fixture}}, now, "mac-mini", "")
+	if !got.Available || got.FetchedAt == nil || *got.FetchedAt != "2026-11-11T19:10:32Z" || *got.AgeSeconds != 1168 || got.Origin != "cache" || got.StatuslineAt != nil {
 		t.Fatalf("available %v fetched %v age %v", got.Available, got.FetchedAt, got.AgeSeconds)
 	}
 	if got.Source != fixture {
@@ -54,7 +54,7 @@ func TestReadRealCache(t *testing.T) {
 	}
 
 	// After the reset time the window is flagged as rolled over.
-	later := Read([]string{fixture}, now.Add(time.Hour), "", "")
+	later := Read(Sources{ClaudeJSON: []string{fixture}}, now.Add(time.Hour), "", "")
 	if !later.SevenDay.Reset || !later.Limits[1].Reset || later.Limits[0].Reset {
 		t.Errorf("reset flags: seven_day %+v limits %+v", later.SevenDay, later.Limits)
 	}
@@ -77,7 +77,7 @@ func TestReadNewestFetchWins(t *testing.T) {
 	old := write(t, filepath.Join(dir, "a"), `{"cachedUsageUtilization":{"fetchedAtMs":1000,"utilization":{"five_hour":{"utilization":10}}}}`)
 	newer := write(t, filepath.Join(dir, "b"), `{"cachedUsageUtilization":{"fetchedAtMs":2000,"utilization":{"five_hour":{"utilization":20}}}}`)
 	none := write(t, filepath.Join(dir, "c"), `{"numStartups":1}`)
-	got := Read([]string{old, none, newer}, time.UnixMilli(3000), "", dir)
+	got := Read(Sources{ClaudeJSON: []string{old, none, newer}}, time.UnixMilli(3000), "", dir)
 	if *got.FiveHour.Percent != 20 || got.Source != filepath.Join("~", "b", ".claude.json") {
 		t.Errorf("five_hour %v source %q", *got.FiveHour.Percent, got.Source)
 	}
@@ -98,7 +98,7 @@ func TestReadTolerantOfOddShapes(t *testing.T) {
 		"empty": `{"cachedUsageUtilization":{}}`,
 	} {
 		p := write(t, filepath.Join(dir, strings.ReplaceAll(name, " ", "-")), body)
-		got := Read([]string{p}, time.Now(), "", "")
+		got := Read(Sources{ClaudeJSON: []string{p}}, time.Now(), "", "")
 		if name == "garbage" || name == "null cache" {
 			if got.Available || got.Limits == nil || got.WeeklyBreakdown == nil {
 				t.Errorf("%s: %+v", name, got)
@@ -114,7 +114,7 @@ func TestReadTolerantOfOddShapes(t *testing.T) {
 			}
 		}
 	}
-	if got := Read(nil, time.Now(), "h", ""); got.Available || got.Source != "" {
+	if got := Read(Sources{}, time.Now(), "h", ""); got.Available || got.Source != "" {
 		t.Errorf("no files: %+v", got)
 	}
 }

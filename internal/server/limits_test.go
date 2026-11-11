@@ -3,10 +3,14 @@ package server
 import (
 	"encoding/json"
 	"testing"
+
+	"stream-agents/internal/limits"
 )
 
 func TestLimitsAPI(t *testing.T) {
-	h := apiMux(Options{Host: "mac-mini", ClaudeJSONPaths: func() []string { return []string{"../../testdata/limits/claude.json"} }})
+	h := apiMux(Options{Host: "mac-mini", LimitsSources: func() limits.Sources {
+		return limits.Sources{ClaudeJSON: []string{"../../testdata/limits/claude.json"}}
+	}})
 	w := apiGet(h, "/api/v1/limits", "192.168.2.50:5555")
 	if w.Code != 200 || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
@@ -15,7 +19,7 @@ func TestLimitsAPI(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"generated_at", "host", "available", "source", "fetched_at", "age_seconds", "five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "session", "limits", "extra_usage", "weekly_breakdown"} {
+	for _, k := range []string{"generated_at", "host", "available", "origin", "fetched_at", "age_seconds", "statusline_at", "cache_fetched_at", "source", "five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "session", "limits", "extra_usage", "weekly_breakdown"} {
 		if _, ok := raw[k]; !ok {
 			t.Errorf("field %s missing", k)
 		}
@@ -26,7 +30,9 @@ func TestLimitsAPI(t *testing.T) {
 }
 
 func TestLimitsAPIWithoutCache(t *testing.T) {
-	for _, opts := range []Options{{}, {ClaudeJSONPaths: func() []string { return []string{"/nonexistent"} }}} {
+	for _, opts := range []Options{{}, {LimitsSources: func() limits.Sources {
+		return limits.Sources{ClaudeJSON: []string{"/nonexistent"}, Statusline: "/nonexistent"}
+	}}} {
 		w := apiGet(apiMux(opts), "/api/v1/limits", "")
 		var raw map[string]json.RawMessage
 		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &raw) != nil {

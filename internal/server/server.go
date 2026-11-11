@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"stream-agents/internal/limits"
 	"stream-agents/internal/store"
 )
 
@@ -38,9 +39,9 @@ type Options struct {
 	// they default to time.Now and time.Local.
 	Now      func() time.Time
 	Location *time.Location
-	// ClaudeJSONPaths lists the .claude.json files /api/v1/limits looks at;
-	// it is called per request so new config dirs are picked up. Nil means none.
-	ClaudeJSONPaths func() []string
+	// LimitsSources tells /api/v1/limits where to look; it is called per
+	// request so new config dirs are picked up. Nil means nowhere.
+	LimitsSources func() limits.Sources
 	// Logf logs one line per /api/ request; it defaults to log.Printf.
 	Logf func(format string, args ...any)
 }
