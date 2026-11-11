@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"stream-agents/internal/limits"
 	"stream-agents/internal/server"
 	"stream-agents/internal/store"
 	"stream-agents/internal/tray"
@@ -52,6 +53,11 @@ func main() {
 		AllowRemoteUI: *allowRemoteUI,
 		Version:       buildVersion(),
 		Host:          host,
+		ClaudeJSONPaths: func() []string {
+			home, _ := os.UserHomeDir()
+			return limits.Candidates(home, os.Getenv("CLAUDE_CONFIG_DIR"),
+				[]string{flag.Lookup("claude-dir").Value.String(), flag.Lookup("claude-config-dir").Value.String()})
+		},
 	})
 
 	// Bind every address before serving any, so a bad one fails at startup.

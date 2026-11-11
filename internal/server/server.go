@@ -38,6 +38,9 @@ type Options struct {
 	// they default to time.Now and time.Local.
 	Now      func() time.Time
 	Location *time.Location
+	// ClaudeJSONPaths lists the .claude.json files /api/v1/limits looks at;
+	// it is called per request so new config dirs are picked up. Nil means none.
+	ClaudeJSONPaths func() []string
 	// Logf logs one line per /api/ request; it defaults to log.Printf.
 	Logf func(format string, args ...any)
 }
@@ -79,6 +82,7 @@ func routes(idx *store.Index, opts Options) []route {
 		f("/api/v1/health", api.handleHealth),
 		f("/api/v1/usage", api.handleUsage),
 		f("/api/v1/sessions", api.handleSessions),
+		f("/api/v1/limits", api.handleLimits),
 		f("/api/", http.NotFound),
 		f("/llms.txt", handleLLMsTxt),
 		f("/llm.txt", handleLLMsTxt),

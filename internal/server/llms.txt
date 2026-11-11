@@ -1,6 +1,6 @@
 # stream-agents
 
-> Local web viewer and usage API for AI coding-agent transcripts (Claude Code, Codex, OpenCode) on one machine. It reads the local transcript stores, renders sessions as HTML, and serves daily token and cost aggregates as JSON so other programs (dashboards, menu bars, other machines) can collect agent spend.
+> Local web viewer and usage API for AI coding-agent transcripts (Claude Code, Codex, OpenCode) on one machine. It reads the local transcript stores, renders sessions as HTML, and serves daily token and cost aggregates, active sessions and Claude subscription limits as JSON so other programs (dashboards, menu bars, other machines) can collect agent spend.
 
 - Base URL: `http://<host>:7777` (the binary defaults to `127.0.0.1:7777`; `make run` / `make tray` listen on `0.0.0.0:7777`). `-listen` takes a comma-separated list of addresses.
 - Auth: none. Everything is read-only (GET/HEAD); there is no CORS and no endpoint that writes or runs anything.
@@ -120,6 +120,48 @@ Which sessions are active:
 - Claude Code terminal sessions (`entrypoint` `cli`): Claude keeps a process registry in `<config dir>/sessions/<pid>.json`, each entry tagged with its pid namespace (`pidDomain`). Only entries in the server's own namespace are checked: if a live local process has the session open, it is listed in either state for up to 24 h after `last_activity` (a pid-reuse guard); if its local process is gone, or it has no entry while every registry entry is local, the session was closed and is dropped (a `working` session stays for 10 min, covering the moment before a process registers). Sessions whose entry is from another namespace (Claude running in a container or VM that shares the config dir) can't be checked and follow the windows below.
 - Everything else (Codex, OpenCode, Claude without a usable registry entry): `working` is listed for 10 min after `last_activity` (the same window as `/hot.json`), `waiting` for 30 min. So a Codex or OpenCode session left waiting longer than 30 min disappears even if its window is still open.
 
+### GET /api/v1/limits
+
+Claude subscription usage limits (the numbers Claude Code's `/usage` shows), as last fetched by Claude Code on this machine. The server never calls Anthropic: it reads the cache Claude Code keeps in its `.claude.json`, so the numbers are only as fresh as `fetched_at`. Cheap (one file read per candidate); polling every minute is fine.
+
+```json
+{
+  "generated_at": "2026-11-11T19:30:00Z",
+  "host": "mac-mini",
+  "available": true,
+  "source": "~/.claude.json",
+  "fetched_at": "2026-11-11T19:10:32Z",
+  "age_seconds": 1168,
+  "five_hour": { "percent": 0, "resets_at": null, "reset": false },
+  "seven_day": { "percent": 12, "resets_at": "2026-11-11T20:00:00Z", "reset": false },
+  "seven_day_opus": null,
+  "seven_day_sonnet": null,
+  "session": { "percent": 0, "resets_at": null, "reset": false },
+  "limits": [
+    { "kind": "session", "group": "session", "percent": 0, "severity": "normal", "resets_at": null, "reset": false, "is_active": false, "model": "", "surface": "" },
+    { "kind": "weekly_all", "group": "weekly", "percent": 12, "severity": "normal", "resets_at": "2026-11-11T20:00:00Z", "reset": false, "is_active": false, "model": "", "surface": "" },
+    { "kind": "weekly_scoped", "group": "weekly", "percent": 14, "severity": "normal", "resets_at": "2026-11-11T20:00:00Z", "reset": false, "is_active": true, "model": "Fable", "surface": "" }
+  ],
+  "extra_usage": { "enabled": false, "percent": null, "spend_limit_reached": false },
+  "weekly_breakdown": [
+    { "key": "claude_code", "name": "Claude Code", "percent": 94 },
+    { "key": "chat", "name": "Chats", "percent": 5 },
+    { "key": "cowork", "name": "Cowork", "percent": 1 },
+    { "key": "other", "name": "Other", "percent": 0 }
+  ]
+}
+```
+
+- Always `200`, even with no cache: then `available: false`, `source: ""`, every window/`fetched_at`/`age_seconds`/`extra_usage` `null`, `limits` and `weekly_breakdown` `[]`. Each field is present in every response, `null` when the cache lacks it.
+- `percent`: 0–100 of the limit used (may be fractional, rounded to 2 decimals); `null` if unknown. `resets_at`: RFC 3339 UTC, `null` when no window is running (e.g. an idle 5-hour session). `reset: true` means `resets_at` was already past at `generated_at`: the window rolled over after the fetch and `percent` is from the previous window (show it as 0 / stale).
+- `five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`: Claude Code's utilization windows. `seven_day` is the weekly limit across all models. `session` is the `limits` entry of kind `session` (the 5-hour session limit); if either `session` or `five_hour` is missing it is copied from the other, and `seven_day` falls back to the `weekly_all` entry.
+- `limits`: Claude Code's own list, in its order. `kind`: `session`, `weekly_all`, `weekly_scoped` (a per-model weekly limit; `model` is its display name, e.g. `Fable`), possibly others. `group`: `session` / `weekly`. `severity`: `normal` or a warning level. `is_active`: the limit Claude Code currently considers binding.
+- `extra_usage`: pay-as-you-go credits beyond the plan; `percent` is of the monthly credit limit.
+- `weekly_breakdown`: share of this week's usage per surface (`claude_code`, `chat`, `cowork`, `other`); sums to ~100, not a limit.
+- `fetched_at`: when Claude Code fetched the numbers (`fetchedAtMs`); `age_seconds` = `generated_at` − `fetched_at`. Claude Code refreshes it while it runs, so a Mac where Claude hasn't run for a while serves old numbers. The limits are per account, not per machine: with several Macs on one account, show the answer with the newest `fetched_at` instead of summing.
+- `source`: the file read (home dir shown as `~`). Candidates: `.claude.json` in `$CLAUDE_CONFIG_DIR`, next to the `-claude-dir` / `-claude-config-dir` projects dirs, `~/.claude.json` and `~/.claude*/.claude.json`; the one with the newest `fetchedAtMs` wins. The account UUID in the cache is never exposed.
+- **Undocumented source**: `cachedUsageUtilization` is Claude Code's internal cache, not a public API. Its keys can change with any Claude Code release; missing, renamed or mistyped keys come out as `null` / `""` / `false` / dropped list entries, never as an error. Treat every field as optional.
+
 ## Local-only endpoints (loopback, or `-allow-remote-ui`)
 
 Used by the web UI and the menu bar; shapes may change.
@@ -167,7 +209,7 @@ Plain-text bodies.
 - `403` — `forbidden`: a non-loopback peer asked for a local-only path.
 - `404` — unknown path (including any unknown `/api/...`) or session.
 - `405` — non-GET/HEAD on `/api/v1/*`; `Allow: GET, HEAD`.
-- `500` — transcripts could not be listed.
+- `500` — transcripts could not be listed (never from `/api/v1/limits`).
 
 ## Gotchas
 

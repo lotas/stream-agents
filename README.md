@@ -166,6 +166,31 @@ namespace, not ones in containers); other sessions drop out 10 min after their
 last activity when working and 30 min after the turn ended when waiting.
 `/llms.txt` has the exact rules.
 
+#### Claude subscription limits
+
+`GET /api/v1/limits` serves the Claude plan limits that Claude Code's `/usage`
+shows (5-hour session, weekly, per-model weekly), read from the cache Claude
+Code keeps in `.claude.json` (`cachedUsageUtilization`); the server never calls
+Anthropic itself:
+
+```json
+{
+  "generated_at": "2026-11-11T19:30:00Z", "host": "mac-mini", "available": true,
+  "source": "~/.claude.json", "fetched_at": "2026-11-11T19:10:32Z", "age_seconds": 1168,
+  "five_hour": { "percent": 0, "resets_at": null, "reset": false },
+  "seven_day": { "percent": 12, "resets_at": "2026-11-11T20:00:00Z", "reset": false },
+  "session":   { "percent": 0, "resets_at": null, "reset": false },
+  "limits": [ { "kind": "weekly_scoped", "group": "weekly", "percent": 14, "model": "Fable", "…": "…" } ],
+  "…": "…"
+}
+```
+
+The numbers are only as fresh as `fetched_at` (Claude Code refreshes them while
+it runs). With several Claude config dirs, the newest fetch wins. The cache is
+an undocumented internal format, so every field is optional: missing or renamed
+keys come out as `null`, and without a cache the endpoint answers
+`"available": false` rather than an error. `/llms.txt` has every field.
+
 #### Permission prompts (optional Claude Code hook)
 
 A transcript can't show that Claude is blocked on a permission prompt (it
@@ -233,6 +258,7 @@ port, so only listen on networks you trust (your LAN or tailnet).
 curl http://mac-mini:7777/api/v1/health
 curl "http://mac-mini:7777/api/v1/usage?days=7"
 curl http://mac-mini:7777/api/v1/sessions
+curl http://mac-mini:7777/api/v1/limits
 ```
 
 ### Running under launchd (macOS)
