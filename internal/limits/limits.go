@@ -75,42 +75,55 @@ type BreakdownItem struct {
 	Percent *float64 `json:"percent"`
 }
 
-// Candidates lists the .claude.json files to look at: one in every Claude
-// config dir (projectRoots are "<config dir>/projects" dirs), in
-// $CLAUDE_CONFIG_DIR, ~/.claude.json and ~/.claude*/.claude.json.
-// Missing files are fine; callers just skip them.
-func Candidates(home, configDirEnv string, projectRoots []string) []string {
+// ConfigDirs lists the Claude config dirs to look in: $CLAUDE_CONFIG_DIR,
+// the parents of projectRoots ("<config dir>/projects" dirs) and every
+// ~/.claude* directory. Dirs that don't exist are fine; callers skip them.
+func ConfigDirs(home, configDirEnv string, projectRoots []string) []string {
 	var out []string
 	seen := map[string]bool{}
-	add := func(p string) {
-		if p == "" || seen[p] {
+	add := func(d string) {
+		if d == "" || seen[d] {
 			return
 		}
-		seen[p] = true
-		out = append(out, p)
+		seen[d] = true
+		out = append(out, d)
 	}
-	if configDirEnv != "" {
-		add(filepath.Join(configDirEnv, ".claude.json"))
-	}
+	add(configDirEnv)
 	for _, r := range projectRoots {
 		if r != "" {
-			add(filepath.Join(filepath.Dir(filepath.Clean(r)), ".claude.json"))
+			add(filepath.Dir(filepath.Clean(r)))
 		}
 	}
 	if home != "" {
-		add(filepath.Join(home, ".claude.json"))
-		matches, _ := filepath.Glob(filepath.Join(home, ".claude*", ".claude.json"))
+		matches, _ := filepath.Glob(filepath.Join(home, ".claude*"))
 		for _, m := range matches {
-			add(m)
+			if fi, err := os.Stat(m); err == nil && fi.IsDir() {
+				add(m)
+			}
 		}
 	}
 	return out
 }
 
+// SourcesFor lists the files to read for the config dirs ConfigDirs finds:
+// each dir's .claude.json and StatuslineFile, plus ~/.claude.json (where
+// the default ~/.claude config dir keeps its state).
+func SourcesFor(home, configDirEnv string, projectRoots []string) Sources {
+	var src Sources
+	if home != "" {
+		src.ClaudeJSON = append(src.ClaudeJSON, filepath.Join(home, ".claude.json"))
+	}
+	for _, d := range ConfigDirs(home, configDirEnv, projectRoots) {
+		src.ClaudeJSON = append(src.ClaudeJSON, filepath.Join(d, ".claude.json"))
+		src.Statusline = append(src.Statusline, filepath.Join(d, StatuslineFile))
+	}
+	return src
+}
+
 // Sources are where Read looks.
 type Sources struct {
 	ClaudeJSON []string // .claude.json candidates; the newest fetchedAtMs wins
-	Statusline string   // LiveFile written by `stream-agents statusline`; "" for none
+	Statusline []string // StatuslineFile candidates; the newest one wins
 }
 
 // Read builds the response from Claude Code's usage cache and, where newer,
@@ -118,28 +131,20 @@ type Sources struct {
 // never fails: unreadable files and odd shapes are skipped.
 func Read(src Sources, now time.Time, host, home string) Response {
 	out := readCache(src.ClaudeJSON, now, host, home)
-	live, ok := Response{}, false
-	if src.Statusline != "" {
-		var rec liveRecord
-		if rec, ok = readLive(src.Statusline); ok {
-			live.FiveHour, live.SevenDay = rec.windows(now)
-			ok = live.FiveHour != nil || live.SevenDay != nil
-			if ok {
-				s := stamp(rec.RecordedAt)
-				out.StatuslineAt = &s
-			}
-		}
-		if ok && (out.CacheFetchedAt == nil || *out.StatuslineAt > *out.CacheFetchedAt) {
+	if rec, ok := newestLive(src.Statusline, now); ok {
+		s := stamp(rec.at)
+		out.StatuslineAt = &s
+		if out.CacheFetchedAt == nil || s > *out.CacheFetchedAt {
 			out.Available, out.Origin, out.FetchedAt = true, "statusline", out.StatuslineAt
-			if live.FiveHour != nil {
-				out.FiveHour = live.FiveHour
-				w := *live.FiveHour
+			if rec.fiveHour != nil {
+				out.FiveHour = rec.fiveHour
+				w := *rec.fiveHour
 				out.Session = &w
-				setLimit(out.Limits, "session", live.FiveHour)
+				setLimit(out.Limits, "session", rec.fiveHour)
 			}
-			if live.SevenDay != nil {
-				out.SevenDay = live.SevenDay
-				setLimit(out.Limits, "weekly_all", live.SevenDay)
+			if rec.sevenDay != nil {
+				out.SevenDay = rec.sevenDay
+				setLimit(out.Limits, "weekly_all", rec.sevenDay)
 			}
 		}
 	}

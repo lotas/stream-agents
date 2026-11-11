@@ -174,16 +174,22 @@ Anthropic; it uses whichever of two local sources is newer:
 
 - **Live, from running sessions** (recommended): Claude Code passes the
   current `rate_limits` to its status line command after every API response.
-  `stream-agents statusline` records them and then runs your own status line
-  command, if any, with the same input:
+  This status line command saves that input as `stream-agents-statusline.json`
+  in the session's Claude config dir (taken from its `transcript_path`), then
+  runs your own status line command, `foxtail` here, with the same input if
+  it is installed:
 
   ```json
-  { "statusLine": { "type": "command", "command": "/usr/local/bin/stream-agents statusline foxtail" } }
+  { "statusLine": { "type": "command", "padding": 0,
+      "command": "i=$(cat); case $i in *'\"rate_limits\"'*) d=$(printf '%s\\n' \"$i\" | sed -n 's|.*\"transcript_path\": *\"\\([^\"]*\\)/projects/.*|\\1|p' | head -n 1); [ -d \"$d\" ] && printf '%s\\n' \"$i\" > \"$d/.stream-agents-statusline.$$\" && mv -f \"$d/.stream-agents-statusline.$$\" \"$d/stream-agents-statusline.json\";; esac; command -v foxtail >/dev/null 2>&1 && printf '%s\\n' \"$i\" | foxtail || :" } }
   ```
 
-  (in `~/.claude/settings.json`; drop `foxtail` if you have no status line, in
-  which case nothing is shown). It writes `<state dir>/limits.json`, the same
-  state dir as the hook below.
+  Put it in the `settings.json` of each Claude config dir and replace both
+  `foxtail`s with your command (or drop `command -v …` to the end if you have
+  none). It needs only `sh` and `sed`, not this binary, so sessions in
+  containers that mount the Mac's config dir feed the Mac's server too. It
+  only writes when the input has `rate_limits` (subscribers, after the
+  session's first reply).
 - **Claude Code's usage cache** (`cachedUsageUtilization` in `.claude.json`):
   only refreshed when Claude Code fetches usage itself, mainly on `/usage`, so
   it is often hours old. It's the only source of the per-model weekly limits

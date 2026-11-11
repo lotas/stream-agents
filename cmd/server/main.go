@@ -23,10 +23,6 @@ func main() {
 		runStats(os.Args[2:])
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "statusline" {
-		runStatusline(os.Args[2:])
-		return
-	}
 	if len(os.Args) > 1 && os.Args[1] == "hook" {
 		runHook(os.Args[2:])
 		return
@@ -59,11 +55,8 @@ func main() {
 		Host:          host,
 		LimitsSources: func() limits.Sources {
 			home, _ := os.UserHomeDir()
-			return limits.Sources{
-				ClaudeJSON: limits.Candidates(home, os.Getenv("CLAUDE_CONFIG_DIR"),
-					[]string{flag.Lookup("claude-dir").Value.String(), flag.Lookup("claude-config-dir").Value.String()}),
-				Statusline: filepath.Join(*stateDir, limits.LiveFile),
-			}
+			return limits.SourcesFor(home, os.Getenv("CLAUDE_CONFIG_DIR"),
+				[]string{flag.Lookup("claude-dir").Value.String(), flag.Lookup("claude-config-dir").Value.String()})
 		},
 	})
 

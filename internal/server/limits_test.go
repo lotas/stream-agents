@@ -31,7 +31,7 @@ func TestLimitsAPI(t *testing.T) {
 
 func TestLimitsAPIWithoutCache(t *testing.T) {
 	for _, opts := range []Options{{}, {LimitsSources: func() limits.Sources {
-		return limits.Sources{ClaudeJSON: []string{"/nonexistent"}, Statusline: "/nonexistent"}
+		return limits.Sources{ClaudeJSON: []string{"/nonexistent"}, Statusline: []string{"/nonexistent"}}
 	}}} {
 		w := apiGet(apiMux(opts), "/api/v1/limits", "")
 		var raw map[string]json.RawMessage

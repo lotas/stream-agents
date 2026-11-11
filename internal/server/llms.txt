@@ -124,7 +124,7 @@ Which sessions are active:
 
 Claude subscription usage limits (what Claude Code's `/usage` shows) for the account used on this machine. The server never calls Anthropic. It combines two local sources and uses whichever is newer for the 5-hour and weekly numbers:
 
-1. **Status line (live)**: `stream-agents statusline` set as Claude Code's status line command (README) records the `rate_limits` Claude Code passes to the status line after each API response of a running session (a documented status-line field). Fresh to within seconds while any session on this machine is in use.
+1. **Status line (live)**: the README's status line command saves the JSON Claude Code passes to its status line (a documented input whose `rate_limits` are updated after each API response of a running session) as `stream-agents-statusline.json` in the session's Claude config dir. Fresh to within seconds while any session using that config dir is in use, including sessions in containers that mount it.
 2. **Usage cache**: `cachedUsageUtilization` in Claude Code's `.claude.json`, which Claude Code only rewrites when it fetches usage itself, mainly when someone opens `/usage`. It can be hours or days old, but it is the only source of the per-model limits, `extra_usage` and `weekly_breakdown`.
 
 Cheap (a few small file reads); polling every minute is fine.
@@ -168,8 +168,8 @@ Cheap (a few small file reads); polling every minute is fine.
 - `extra_usage`: pay-as-you-go credits beyond the plan; `percent` is of the monthly credit limit.
 - `weekly_breakdown`: share of this week's usage per surface (`claude_code`, `chat`, `cowork`, `other`); sums to ~100, not a limit.
 - The limits are per account, not per machine: with several machines on one account, show the answer with the newest `fetched_at` instead of summing. A machine with no session in use (and nobody opening `/usage`) serves old numbers.
-- Status line file: `<state dir>/limits.json` (state dir as for the hook: `-state-dir`, `STREAM_AGENTS_STATE_DIR`, default `~/.local/state/stream-agents`). An unchanged reading is rewritten at most every 30 s, so `statusline_at` can lag by that much while nothing changes. Claude Code only includes `rate_limits` for subscribers after a session's first API response. Sessions in a container only feed it if the container runs the same binary with a state dir shared with the host.
-- Cache files: `.claude.json` in `$CLAUDE_CONFIG_DIR`, next to the `-claude-dir` / `-claude-config-dir` projects dirs, `~/.claude.json` and `~/.claude*/.claude.json`; the one with the newest `fetchedAtMs` wins and is named in `source` (home dir shown as `~`). The account UUID in the cache is never exposed.
+- Status line files: `stream-agents-statusline.json` in each config dir (see below); the most recently written one with a `five_hour` or `seven_day` window wins, and its mtime is `statusline_at`. It is rewritten on every status line refresh that carries `rate_limits` (subscribers, after a session's first reply), so a session idle for a while stops refreshing it.
+- Config dirs searched: `$CLAUDE_CONFIG_DIR`, the parents of the `-claude-dir` / `-claude-config-dir` projects dirs (by default `~/.claude` and `~/.config/claude`) and every `~/.claude*` directory. Cache files: `.claude.json` in each of them plus `~/.claude.json`; the one with the newest `fetchedAtMs` wins and is named in `source` (home dir shown as `~`). The account UUID in the cache is never exposed.
 - **Undocumented source**: `cachedUsageUtilization` is Claude Code's internal cache, not a public API, and can change with any Claude Code release. Missing, renamed or mistyped keys come out as `null` / `""` / `false` / dropped list entries, never as an error. Treat every field as optional.
 
 ## Local-only endpoints (loopback, or `-allow-remote-ui`)

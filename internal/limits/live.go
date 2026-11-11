@@ -1,72 +1,60 @@
 package limits
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"time"
 )
 
-// LiveFile is the file under the state dir where `stream-agents statusline`
-// records the rate limits a running Claude Code session reports.
-const LiveFile = "limits.json"
+// StatuslineFile is where the status line snippet (README) saves Claude
+// Code's status line payload, in the config dir of the session (derived from
+// its transcript_path). It needs nothing but sh, so it also works for
+// sessions in containers that share the config dir but not this binary.
+const StatuslineFile = "stream-agents-statusline.json"
 
-// rewriteAfter limits how often an unchanged report is rewritten; the
-// status line can run several times a second.
-const rewriteAfter = 30 * time.Second
-
-// liveRecord is LiveFile's content.
-type liveRecord struct {
-	RecordedAt time.Time       `json:"recorded_at"`
-	SessionID  string          `json:"session_id,omitempty"`
-	RateLimits json.RawMessage `json:"rate_limits"` // as Claude Code sent it
+// liveReading is the rate limits of one saved status line payload.
+type liveReading struct {
+	at                 time.Time // file mtime: when a session last reported them
+	fiveHour, sevenDay *Window
 }
 
-// RecordStatusline saves the rate_limits of a Claude Code status line
-// payload to path. Claude Code only includes them for subscribers after the
-// first API response, so payloads without them are ignored. It reports
-// whether it wrote the file.
-func RecordStatusline(payload []byte, path string, now time.Time) (bool, error) {
-	var in struct {
-		SessionID  string          `json:"session_id"`
-		RateLimits json.RawMessage `json:"rate_limits"`
+// newestLive returns the most recently written payload among paths that has
+// at least one rate-limit window.
+func newestLive(paths []string, now time.Time) (liveReading, bool) {
+	var best liveReading
+	found := false
+	for _, p := range paths {
+		fi, err := os.Stat(p)
+		if err != nil || (found && !fi.ModTime().After(best.at)) {
+			continue
+		}
+		r, ok := readLive(p, now)
+		if !ok {
+			continue
+		}
+		r.at = fi.ModTime()
+		best, found = r, true
 	}
-	if err := json.Unmarshal(payload, &in); err != nil {
-		return false, err
-	}
-	var rl map[string]any
-	if json.Unmarshal(in.RateLimits, &rl) != nil || (rl["five_hour"] == nil && rl["seven_day"] == nil) {
-		return false, nil
-	}
-	if old, ok := readLive(path); ok && now.Sub(old.RecordedAt) < rewriteAfter && now.Sub(old.RecordedAt) >= 0 &&
-		jsonEqual(old.RateLimits, in.RateLimits) {
-		return false, nil
-	}
-	data, err := json.Marshal(liveRecord{RecordedAt: now.UTC(), SessionID: in.SessionID, RateLimits: in.RateLimits})
-	if err != nil {
-		return false, err
-	}
-	return true, writeFileAtomic(path, data)
+	return best, found
 }
 
-func readLive(path string) (liveRecord, bool) {
-	var r liveRecord
+func readLive(path string, now time.Time) (liveReading, bool) {
 	data, err := os.ReadFile(path)
-	if err != nil || json.Unmarshal(data, &r) != nil || r.RecordedAt.IsZero() {
-		return liveRecord{}, false
+	if err != nil {
+		return liveReading{}, false
 	}
-	return r, true
+	var payload struct {
+		RateLimits map[string]any `json:"rate_limits"`
+	}
+	if json.Unmarshal(data, &payload) != nil { // e.g. caught mid-write
+		return liveReading{}, false
+	}
+	r := liveReading{fiveHour: liveWindow(payload.RateLimits["five_hour"], now), sevenDay: liveWindow(payload.RateLimits["seven_day"], now)}
+	return r, r.fiveHour != nil || r.sevenDay != nil
 }
 
-// liveWindows returns the status line's five_hour and seven_day windows
-// (nil when absent).
-func (r liveRecord) windows(now time.Time) (fiveHour, sevenDay *Window) {
-	var rl map[string]any
-	_ = json.Unmarshal(r.RateLimits, &rl)
-	return liveWindow(rl["five_hour"], now), liveWindow(rl["seven_day"], now)
-}
-
+// liveWindow reads a status line window: used_percentage, resets_at in Unix
+// seconds.
 func liveWindow(v any, now time.Time) *Window {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -86,29 +74,10 @@ func liveWindow(v any, now time.Time) *Window {
 	return w
 }
 
-func jsonEqual(a, b json.RawMessage) bool {
-	var x, y bytes.Buffer
-	if json.Compact(&x, a) != nil || json.Compact(&y, b) != nil {
-		return false
-	}
-	return bytes.Equal(x.Bytes(), y.Bytes())
-}
-
-func writeFileAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
-}
+// StatuslineCommand is the status line command the README documents, with
+// "foxtail" standing for the user's own status line command. It saves the
+// payload (only when it has rate_limits, so a session without them never
+// overwrites a good reading) next to the transcripts' projects dir, then
+// runs foxtail with the same input if it is installed. It always exits 0.
+// POSIX sh and sed only.
+const StatuslineCommand = `i=$(cat); case $i in *'"rate_limits"'*) d=$(printf '%s\n' "$i" | sed -n 's|.*"transcript_path": *"\([^"]*\)/projects/.*|\1|p' | head -n 1); [ -d "$d" ] && printf '%s\n' "$i" > "$d/.stream-agents-statusline.$$" && mv -f "$d/.stream-agents-statusline.$$" "$d/` + StatuslineFile + `";; esac; command -v foxtail >/dev/null 2>&1 && printf '%s\n' "$i" | foxtail || :`

@@ -119,12 +119,22 @@ func TestReadTolerantOfOddShapes(t *testing.T) {
 	}
 }
 
-func TestCandidates(t *testing.T) {
+func TestSourcesFor(t *testing.T) {
 	home := t.TempDir()
-	write(t, filepath.Join(home, ".claude-work"), `{}`)
-	got := Candidates(home, "/cfg", []string{filepath.Join(home, ".claude", "projects"), "/cfg/projects/"})
-	want := []string{"/cfg/.claude.json", filepath.Join(home, ".claude", ".claude.json"), filepath.Join(home, ".claude.json"), filepath.Join(home, ".claude-work", ".claude.json")}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+	for _, d := range []string{".claude-work", ".claude"} {
+		if err := os.MkdirAll(filepath.Join(home, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(t, home, `{}`) // ~/.claude.json, a file: not a config dir
+	got := SourcesFor(home, "/cfg", []string{filepath.Join(home, ".claude", "projects"), "/cfg/projects/"})
+	dirs := []string{"/cfg", filepath.Join(home, ".claude"), filepath.Join(home, ".claude-work")}
+	want := Sources{ClaudeJSON: []string{filepath.Join(home, ".claude.json")}}
+	for _, d := range dirs {
+		want.ClaudeJSON = append(want.ClaudeJSON, filepath.Join(d, ".claude.json"))
+		want.Statusline = append(want.Statusline, filepath.Join(d, StatuslineFile))
+	}
+	if strings.Join(got.ClaudeJSON, " ") != strings.Join(want.ClaudeJSON, " ") || strings.Join(got.Statusline, " ") != strings.Join(want.Statusline, " ") {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 }
