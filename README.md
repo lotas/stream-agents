@@ -161,7 +161,8 @@ for you right now, waiting ones first, e.g. for an attention light:
 State comes from the transcripts (a finished turn means `waiting`). Subagents
 and program-driven runs (`claude -p`, `codex exec`) are left out. Claude Code
 terminal sessions count while their process runs (Claude's own
-`~/.claude/sessions` registry); other sessions drop out 10 min after their
+`~/.claude/sessions` registry; only for processes in the server's own pid
+namespace, not ones in containers); other sessions drop out 10 min after their
 last activity when working and 30 min after the turn ended when waiting.
 `/llms.txt` has the exact rules.
 

@@ -362,3 +362,61 @@ func TestActiveSessionsForegroundSubagentKeepsParent(t *testing.T) {
 		t.Fatalf("active = %+v", a)
 	}
 }
+
+// registerForeignProcess writes a registry entry from another pid namespace,
+// as Claude running in a container writes into a shared config dir.
+func registerForeignProcess(t *testing.T, config string, pid int, session string) {
+	t.Helper()
+	writeFile(t, filepath.Join(config, "sessions", fmt.Sprintf("%d.json", pid)),
+		fmt.Sprintf(`{"pid":%d,"sessionId":%q,"status":"idle","pidDomain":"linux:0000000000000000000000000000beef:pid:[4026599999]"}`, pid, session), at(0))
+}
+
+func TestActiveSessionsForeignPIDNamespace(t *testing.T) {
+	setup := func(t *testing.T) (string, *store.Index) {
+		config, proj := claudeConfig(t)
+		copyFixture(t, "finished.jsonl", filepath.Join(proj, "S.jsonl"), at(12)) // turn ended at 10 s
+		return config, store.NewIndex(store.NewClaudeStore(filepath.Join(config, "projects")))
+	}
+	active := func(t *testing.T, idx *store.Index, now time.Time) []store.ActiveSession {
+		t.Helper()
+		a, err := idx.ActiveSessions(context.Background(), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+
+	t.Run("foreign entry is neither open nor closed", func(t *testing.T) {
+		config, idx := setup(t)
+		// Its pid happens to be alive here; that must not count as open.
+		registerForeignProcess(t, config, os.Getpid(), "S")
+		if a := active(t, idx, at(10*60)); len(a) != 1 || a[0].State != store.StateWaiting {
+			t.Fatalf("10 min later: %+v, want waiting", a)
+		}
+		if a := active(t, idx, at(60*60)); len(a) != 0 {
+			t.Fatalf("an hour later: %+v, want none (waiting window)", a)
+		}
+	})
+	t.Run("dead pid in a foreign namespace does not close it", func(t *testing.T) {
+		config, idx := setup(t)
+		registerForeignProcess(t, config, deadPID(t), "S")
+		if a := active(t, idx, at(10*60)); len(a) != 1 {
+			t.Fatalf("active = %+v, want the session", a)
+		}
+	})
+	t.Run("missing entry with foreign entries around is unknown", func(t *testing.T) {
+		config, idx := setup(t)
+		registerProcess(t, config, os.Getpid(), "other")
+		registerForeignProcess(t, config, 471, "another")
+		if a := active(t, idx, at(10*60)); len(a) != 1 {
+			t.Fatalf("active = %+v, want the session", a)
+		}
+	})
+	t.Run("missing entry in an all-local registry is closed", func(t *testing.T) {
+		config, idx := setup(t)
+		registerProcess(t, config, os.Getpid(), "other")
+		if a := active(t, idx, at(10*60)); len(a) != 0 {
+			t.Fatalf("active = %+v, want none", a)
+		}
+	})
+}

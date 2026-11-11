@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -215,22 +216,36 @@ func claudeSubagentActivity(dir string, since, now time.Time) time.Time {
 // claudeRegistry reads Claude Code's process registry: one <pid>.json per
 // running Claude process in <config dir>/sessions, naming the session it has
 // open. Files of exited processes may linger, so the pid is checked too.
+//
+// Each entry records the pid namespace it belongs to ("pidDomain", e.g.
+// "linux:<machine-id>:pid:[4026532824]"). A config dir shared with
+// containers or VMs holds entries whose pids mean nothing here, and since
+// files are named by pid, processes in different namespaces can even
+// overwrite each other's entry. So a pid is only checked when its entry is
+// in this process's own domain, and a missing entry only means "closed"
+// when every entry in the registry is local.
 type claudeRegistry struct {
 	mu    sync.Mutex
 	files map[string]registryFile // by path
 	dirs  map[string]registryDir  // by dir, refreshed at most once a second
+	// isLocal reports whether a pidDomain is this process's own; nil means
+	// localPIDDomain.
+	isLocal func(domain string) bool
 }
 
 type registryFile struct {
 	mtime     time.Time
 	pid       int
 	sessionID string
+	domain    string
 }
 
 type registryDir struct {
-	read time.Time
-	ok   bool            // the directory exists and lists processes
-	open map[string]bool // session IDs held by a live process
+	read      time.Time
+	open      map[string]bool // held by a live local process
+	closed    map[string]bool // local entry whose process is gone
+	foreign   map[string]bool // entry in another pid namespace: can't tell
+	exclusive bool            // has local entries and no foreign ones
 }
 
 const registryTTL = time.Second
@@ -247,16 +262,18 @@ func (r *claudeRegistry) liveness(dir, id string, now time.Time) Liveness {
 		r.dirs[dir] = d
 	}
 	switch {
-	case !d.ok:
-		return LiveUnknown
 	case d.open[id]:
 		return LiveOpen
+	case d.foreign[id]:
+		return LiveUnknown
+	case d.closed[id], d.exclusive:
+		return LiveClosed
 	}
-	return LiveClosed
+	return LiveUnknown
 }
 
 func (r *claudeRegistry) readDir(dir string, now time.Time) registryDir {
-	d := registryDir{read: now, open: map[string]bool{}}
+	d := registryDir{read: now, open: map[string]bool{}, closed: map[string]bool{}, foreign: map[string]bool{}}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return d
@@ -264,6 +281,11 @@ func (r *claudeRegistry) readDir(dir string, now time.Time) registryDir {
 	if r.files == nil {
 		r.files = map[string]registryFile{}
 	}
+	isLocal := r.isLocal
+	if isLocal == nil {
+		isLocal = localPIDDomain
+	}
+	local, foreign := 0, 0
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
@@ -278,22 +300,58 @@ func (r *claudeRegistry) readDir(dir string, now time.Time) registryDir {
 			var raw struct {
 				PID       int    `json:"pid"`
 				SessionID string `json:"sessionId"`
+				PIDDomain string `json:"pidDomain"`
 			}
 			if data, err := os.ReadFile(path); err == nil {
 				_ = json.Unmarshal(data, &raw)
 			}
-			f = registryFile{mtime: fi.ModTime(), pid: raw.PID, sessionID: raw.SessionID}
+			f = registryFile{mtime: fi.ModTime(), pid: raw.PID, sessionID: raw.SessionID, domain: raw.PIDDomain}
 			r.files[path] = f
 		}
 		if f.pid <= 0 || f.sessionID == "" {
 			continue
 		}
-		d.ok = true
-		if pidAlive(f.pid) {
+		switch {
+		case !isLocal(f.domain):
+			foreign++
+			d.foreign[f.sessionID] = true
+		case pidAlive(f.pid):
+			local++
 			d.open[f.sessionID] = true
+		default:
+			local++
+			d.closed[f.sessionID] = true
 		}
 	}
+	d.exclusive = local > 0 && foreign == 0
 	return d
+}
+
+var (
+	ownPIDDomainOnce sync.Once
+	ownPIDDomain     string // "" when it can't be determined
+)
+
+// localPIDDomain reports whether a registry entry's pidDomain is this
+// process's pid namespace. Entries without one (older Claude versions) are
+// assumed local. On Linux the domain is "linux:<machine-id>:<pid namespace>";
+// elsewhere only the platform prefix (Node's process.platform, which matches
+// GOOS for darwin and linux) can be compared.
+func localPIDDomain(domain string) bool {
+	if domain == "" {
+		return true
+	}
+	if runtime.GOOS != "linux" {
+		return strings.HasPrefix(domain, runtime.GOOS+":")
+	}
+	ownPIDDomainOnce.Do(func() {
+		id, err1 := os.ReadFile("/etc/machine-id")
+		ns, err2 := os.Readlink("/proc/self/ns/pid")
+		if err1 == nil && err2 == nil {
+			ownPIDDomain = "linux:" + strings.TrimSpace(string(id)) + ":" + ns
+		}
+	})
+	return ownPIDDomain != "" && domain == ownPIDDomain
 }
 
 // claudeRegistryDir maps <config>/projects/<project> to <config>/sessions.
