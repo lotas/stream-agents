@@ -84,6 +84,7 @@ func routes(idx *store.Index, opts Options) []route {
 		f("/api/v1/usage", api.handleUsage),
 		f("/api/v1/sessions", api.handleSessions),
 		f("/api/v1/limits", api.handleLimits),
+		f("/api/v1/session-costs", api.handleSessionCosts),
 		f("/api/", http.NotFound),
 		f("/llms.txt", handleLLMsTxt),
 		f("/llm.txt", handleLLMsTxt),

@@ -153,6 +153,7 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 	modelSeen := make(map[string]bool)
 	var previousUsage codexTokenUsage
 	var turn codexTurn
+	metaSeen := false
 	for scanner.Scan() {
 		count++
 		var line struct {
@@ -220,6 +221,11 @@ func parseCodexSessionMeta(fpath, id string, mtime time.Time) Session {
 			json.Unmarshal(line.Payload, &meta)
 			sess.Project = meta.CWD
 			sess.Sidechain = codexDriven(meta.Originator, meta.Source)
+			if !metaSeen {
+				// Later session_meta records come from history a fork copied.
+				metaSeen = true
+				sess.Parent = codexParent(meta.Source)
+			}
 		}
 		if sess.Title == "" {
 			for _, msg := range ParseCodexJSONLLine(scanner.Bytes()) {
@@ -258,6 +264,23 @@ func codexDriven(originator string, source json.RawMessage) bool {
 		return true
 	}
 	return originator != "" && !strings.HasPrefix(strings.ToLower(originator), "codex")
+}
+
+// codexParent returns the parent thread of a spawned subagent, whose source
+// is {"subagent": {"thread_spawn": {"parent_thread_id": ...}}}. Other
+// subagents (review, compact, guardian) do not name one.
+func codexParent(source json.RawMessage) string {
+	var src struct {
+		Subagent struct {
+			ThreadSpawn struct {
+				ParentThreadID string `json:"parent_thread_id"`
+			} `json:"thread_spawn"`
+		} `json:"subagent"`
+	}
+	if json.Unmarshal(source, &src) != nil {
+		return ""
+	}
+	return src.Subagent.ThreadSpawn.ParentThreadID
 }
 
 func parseCodexJSONL(fpath string) ([]Message, error) {

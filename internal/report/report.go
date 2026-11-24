@@ -99,14 +99,12 @@ func (r *Row) addUsage(u store.ModelUsage) {
 	r.Tokens = r.Input + r.Output + r.CacheRead + r.CacheWrite
 	r.Cost += u.Cost
 	r.Billed += u.Billed
-	if u.Tokens && !u.HasCost && tokens(u) > 0 {
+	if u.CostPartial() {
 		r.CostPartial = true
 	}
 }
 
-func tokens(u store.ModelUsage) int {
-	return u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheCreationTokens
-}
+func tokens(u store.ModelUsage) int { return u.Total() }
 
 func modelLabel(u store.ModelUsage) string {
 	model := u.Model

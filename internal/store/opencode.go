@@ -137,6 +137,7 @@ func (s *OpenCodeStore) readSessions(ctx context.Context) ([]Session, error) {
 			Started:   unixMilli(created),
 			Modified:  unixMilli(updated),
 			Sidechain: parent != "",
+			Parent:    parent,
 		}
 		index[id] = sess
 		if parent != "" {

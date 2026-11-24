@@ -34,6 +34,12 @@ type Session struct {
 	// subagents, and agent runs driven by another program (codex exec, Codex
 	// started by Claude Code). They never count as active sessions.
 	Sidechain bool
+	// Parent is the ID of the session (same agent) that spawned this one, when
+	// the transcript names it: old-layout Claude subagents, Codex
+	// thread_spawn subagents and OpenCode child sessions. Claude subagents in
+	// <session>/subagents/ are not sessions of their own; their usage is
+	// already part of the parent's.
+	Parent string
 	// entrypoint is how a Claude session was started ("cli", "sdk-cli", ...).
 	entrypoint string
 }
@@ -73,11 +79,43 @@ func (s *Session) addUsage(provider, model string, usage *TokenUsage, cost *floa
 	}
 }
 
+// CostPartial reports whether u carried tokens that no known price covers.
+func (u ModelUsage) CostPartial() bool { return u.Tokens && !u.HasCost && u.Total() > 0 }
+
+// addSessionUsage adds other's usage into s: totals and per-model breakdown.
+func (s *Session) addSessionUsage(other Session) {
+	s.HasTokens = s.HasTokens || other.HasTokens
+	s.InputTokens += other.InputTokens
+	s.OutputTokens += other.OutputTokens
+	s.CacheReadTokens += other.CacheReadTokens
+	s.CacheCreationTokens += other.CacheCreationTokens
+	if other.HasCost {
+		s.HasCost = true
+		s.Cost += other.Cost
+	}
+	for _, u := range other.Usage {
+		var usage *TokenUsage
+		if u.Tokens {
+			usage = &u.TokenUsage
+		}
+		var cost *float64
+		if u.HasCost {
+			cost = &u.Cost
+		}
+		s.addUsage(u.Provider, u.Model, usage, cost)
+	}
+}
+
 type TokenUsage struct {
 	InputTokens         int
 	OutputTokens        int
 	CacheCreationTokens int
 	CacheReadTokens     int
+}
+
+// Total is the sum of all token kinds.
+func (u TokenUsage) Total() int {
+	return u.InputTokens + u.OutputTokens + u.CacheCreationTokens + u.CacheReadTokens
 }
 
 type Message struct {

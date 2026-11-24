@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,6 +23,13 @@ func ClaudeDecodeProject(dirName string) string {
 type claudeEntry struct {
 	path    string
 	mtime   time.Time
+	subs    string // claudeSubagentStamp of the session's subagents when parsed
+	session Session
+}
+
+// claudeSubagent is a parsed subagent transcript, kept until its file changes.
+type claudeSubagent struct {
+	mtime   time.Time
 	session Session
 }
 
@@ -30,11 +38,12 @@ type ClaudeStore struct {
 	roots    []string
 	mu       sync.Mutex
 	index    map[string]claudeEntry
+	subs     map[string]claudeSubagent // by path
 	registry claudeRegistry
 }
 
 func NewClaudeStore(roots ...string) *ClaudeStore {
-	return &ClaudeStore{roots: roots, index: make(map[string]claudeEntry)}
+	return &ClaudeStore{roots: roots, index: make(map[string]claudeEntry), subs: make(map[string]claudeSubagent)}
 }
 
 func (s *ClaudeStore) Agent() string { return "claude" }
@@ -60,6 +69,12 @@ func (s *ClaudeStore) ListSessions(ctx context.Context) ([]Session, error) {
 			if err != nil {
 				continue
 			}
+			dirs := make(map[string]bool)
+			for _, f := range files {
+				if f.IsDir() {
+					dirs[f.Name()] = true
+				}
+			}
 			for _, f := range files {
 				if f.IsDir() || filepath.Ext(f.Name()) != ".jsonl" {
 					continue
@@ -71,13 +86,19 @@ func (s *ClaudeStore) ListSessions(ctx context.Context) ([]Session, error) {
 					continue
 				}
 				mtime := fi.ModTime()
+				var subFiles []os.DirEntry
+				if dirs[id] {
+					subFiles, _ = os.ReadDir(filepath.Join(projDir, id, "subagents"))
+				}
+				subs := claudeSubagentStamp(subFiles)
 
-				if existing, ok := s.index[id]; ok && !mtime.After(existing.mtime) {
+				if existing, ok := s.index[id]; ok && !mtime.After(existing.mtime) && existing.subs == subs {
 					continue
 				}
 
 				sess := s.parseSessionMeta(fpath, id, projEntry.Name(), mtime)
-				s.index[id] = claudeEntry{path: fpath, mtime: mtime, session: sess}
+				s.addSubagents(&sess, filepath.Join(projDir, id, "subagents"), subFiles)
+				s.index[id] = claudeEntry{path: fpath, mtime: mtime, subs: subs, session: sess}
 			}
 		}
 	}
@@ -88,6 +109,48 @@ func (s *ClaudeStore) ListSessions(ctx context.Context) ([]Session, error) {
 	}
 	sortSessionsByModified(out)
 	return out, nil
+}
+
+func isClaudeSubagentFile(name string) bool {
+	return strings.HasPrefix(name, "agent-") && strings.HasSuffix(name, ".jsonl")
+}
+
+// claudeSubagentStamp identifies the state of a session's subagent
+// transcripts, so the session is re-read when one is added or written.
+func claudeSubagentStamp(files []os.DirEntry) string {
+	var b strings.Builder
+	for _, f := range files {
+		if f.IsDir() || !isClaudeSubagentFile(f.Name()) {
+			continue
+		}
+		fi, err := f.Info()
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&b, "%s:%d:%d;", f.Name(), fi.Size(), fi.ModTime().UnixNano())
+	}
+	return b.String()
+}
+
+// addSubagents folds the token usage and cost of the session's subagent
+// transcripts (Task/Agent tool runs in dir) into sess. Callers hold s.mu.
+func (s *ClaudeStore) addSubagents(sess *Session, dir string, files []os.DirEntry) {
+	for _, f := range files {
+		if f.IsDir() || !isClaudeSubagentFile(f.Name()) {
+			continue
+		}
+		fi, err := f.Info()
+		if err != nil {
+			continue
+		}
+		path := filepath.Join(dir, f.Name())
+		sub, ok := s.subs[path]
+		if !ok || !sub.mtime.Equal(fi.ModTime()) {
+			sub = claudeSubagent{mtime: fi.ModTime(), session: s.parseSessionMeta(path, strings.TrimSuffix(f.Name(), ".jsonl"), filepath.Base(filepath.Dir(filepath.Dir(dir))), fi.ModTime())}
+			s.subs[path] = sub
+		}
+		sess.addSessionUsage(sub.session)
+	}
 }
 
 func (s *ClaudeStore) FilePath(id string) string {
@@ -157,6 +220,13 @@ func (s *ClaudeStore) parseSessionMeta(fpath, id, dirName string, mtime time.Tim
 			// files whose records are all sidechain records.
 			sidechainKnown = true
 			sess.Sidechain = jsonBool(sc)
+		}
+		if sess.Sidechain && sess.Parent == "" {
+			// A subagent's records carry the session ID of its parent.
+			var parent string
+			if json.Unmarshal(raw["sessionId"], &parent) == nil && parent != id {
+				sess.Parent = parent
+			}
 		}
 		if sess.entrypoint == "" {
 			if ep, ok := raw["entrypoint"]; ok {

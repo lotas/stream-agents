@@ -120,6 +120,54 @@ Which sessions are active:
 - Claude Code terminal sessions (`entrypoint` `cli`): Claude keeps a process registry in `<config dir>/sessions/<pid>.json`, each entry tagged with its pid namespace (`pidDomain`). Only entries in the server's own namespace are checked: if a live local process has the session open, it is listed in either state for up to 24 h after `last_activity` (a pid-reuse guard); if its local process is gone, or it has no entry while every registry entry is local, the session was closed and is dropped (a `working` session stays for 10 min, covering the moment before a process registers). Sessions whose entry is from another namespace (Claude running in a container or VM that shares the config dir) can't be checked and follow the windows below.
 - Everything else (Codex, OpenCode, Claude without a usable registry entry): `working` is listed for 10 min after `last_activity` (the same window as `/hot.json`), `waiting` for 30 min. So a Codex or OpenCode session left waiting longer than 30 min disappears even if its window is still open.
 
+### GET /api/v1/session-costs
+
+Per-session cost estimates, for tools that attribute agent spend to their own units of work (the devtainer task board joins them with its cards). Two modes:
+
+- `?cwd=<abs path>&days=N`: every top-level session whose working directory is `cwd` or below it, matched on a path boundary (`/x/proj` matches `/x/proj` and `/x/proj/.devtainer/board/worktrees/T-12`, not `/x/proj2`; a trailing `/` is ignored), that started in the last `N` local calendar days including today (counted like `/api/v1/usage`). `days` defaults to 31 and is capped at 400.
+- `?ids=claude/<id>,codex/<id>,opencode/<id>`: exactly those sessions, whatever their age; `days` and `cwd` are ignored. The ids are the `{agent}/{id}` of `/session/{agent}/{id}`. Unknown ids, and ids of subagent sessions, are left out without an error. Duplicates are reported once.
+
+If both are given, `ids` wins. No match is `200` with `"sessions": []`, never `404`.
+
+```json
+{
+  "generated_at": "2026-11-24T12:03:13Z",
+  "currency": "USD",
+  "cost_multipliers": { "codex": 1.75 },
+  "sessions": [
+    {
+      "agent": "codex",
+      "id": "01a0b979-828d-70e0-aeff-e8cc5de76942",
+      "cwd": "/Users/yarik/dev/vic/3C-Datalec",
+      "title": "i'm trying to learn powerBI",
+      "started": "2026-09-19T11:43:38Z",
+      "last_activity": "2026-09-19T12:53:04Z",
+      "models": [
+        { "provider": "openai", "model": "gpt-5.6-sol", "input_tokens": 112041, "output_tokens": 2817, "cache_read_tokens": 578688, "cache_write_tokens": 0, "cost": 0.735979, "billed": 1.287964, "cost_partial": false },
+        { "provider": "openai", "model": "gpt-5.6-terra", "input_tokens": 63237, "output_tokens": 6498, "cache_read_tokens": 792832, "cache_write_tokens": 0, "cost": 0.363016, "billed": 0.635279, "cost_partial": false },
+        { "provider": "openai", "model": "gpt-5.6-luna", "input_tokens": 40523, "output_tokens": 3824, "cache_read_tokens": 212224, "cache_write_tokens": 0, "cost": 0.016938, "billed": 0.029641, "cost_partial": false }
+      ],
+      "input_tokens": 215801,
+      "output_tokens": 13139,
+      "cache_read_tokens": 1583744,
+      "cache_write_tokens": 0,
+      "cost": 1.115933,
+      "billed": 1.952884,
+      "cost_partial": false,
+      "subagents": 0
+    }
+  ],
+  "totals": { "cost": 1.115933, "billed": 1.952884, "cost_partial": false }
+}
+```
+
+- Subagents are rolled into their parent's row, tokens and cost, and get no row of their own: Claude Task/Agent subagents (`<session>/subagents/agent-*.jsonl`, and old-layout top-level `agent-*.jsonl` sidechain files via their `sessionId`), Codex `thread_spawn` subagents (via `parent_thread_id`), OpenCode child sessions (`parent_id`), nested ones included. A child counts towards its parent whatever its own directory or start time. `subagents` is the number of child sessions folded in (Claude `subagents/` files are already part of the parent and not counted). Subagents that don't name a parent (Codex `guardian`/review runs) and program-driven runs (`claude -p`, `codex exec`) are rows of their own.
+- Pricing, `cost_multipliers`, `billed` and `cost_partial` are exactly those of `/api/v1/usage`; `cwd=/&days=N` totals match its sum over the same days. `models` merge a model's usage across the session and its subagents, most expensive first; they add up to the session's tokens, `cost` and `billed`, and sessions add up to `totals` (all rounded to 6 decimals). A session's `cost_partial` is true if any model's is; so is `totals.cost_partial`.
+- `cwd`: the session's working directory (for sessions run in a devtainer, the host project path they were mounted at). `title`: as in `/api/v1/sessions`. `started`: first record, RFC 3339 UTC (`""` if unknown). `last_activity`: newest record or file write of the session or any of its subagents.
+- Order: newest `started` first.
+- Errors are JSON, `{"error": "..."}`: `400` for a missing or relative `cwd` without `ids`, a bad `days` (not a positive integer) or an `ids` list with no entries; `500` if transcripts can't be listed.
+- Cost: answers come from the in-memory index (only changed transcripts are re-read), ~15–30 ms for a 400-day window over every project once warm.
+
 ### GET /api/v1/limits
 
 Claude subscription usage limits (what Claude Code's `/usage` shows) for the account used on this machine. The server never calls Anthropic. It combines two local sources and uses whichever is newer for the 5-hour and weekly numbers:
@@ -213,7 +261,7 @@ Recently active sessions for the "Active" panel, as a JSON array (`[]` when none
 
 ## Errors
 
-Plain-text bodies.
+Plain-text bodies, except `/api/v1/session-costs`, which answers `{"error": "..."}`.
 
 - `400` — bad query, e.g. `days must be a positive integer`.
 - `403` — `forbidden`: a non-loopback peer asked for a local-only path.
@@ -223,6 +271,7 @@ Plain-text bodies.
 
 ## Gotchas
 
+- Claude subagent transcripts (`<session>/subagents/agent-*.jsonl`) count as part of their parent session everywhere: `/api/v1/usage`, `/api/v1/session-costs`, `/api/summary.json`, the HTML pages and the `stats` CLI.
 - Costs are estimates from token counts and a small price table; they ignore historical price changes and fast/batch/regional/long-context modifiers. Unknown models have no cost. Usage that never reaches local transcripts (Codex memories, cloud tasks) is missing.
 - `billed` defaults to a 1.75× multiplier for Codex only. Override with `-cost-multiplier codex=1,claude=1.2` or `STREAM_AGENTS_COST_MULTIPLIER`; listed agents replace the defaults.
 - Days are computed in the server's time zone (`TZ` overrides it). `/api/v1/usage`, `/api/summary.json` and the `stats` CLI use local days; the HTML `/stats` page uses UTC days, so its numbers can differ near midnight.

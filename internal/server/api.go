@@ -79,6 +79,10 @@ func readOnly(w http.ResponseWriter, r *http.Request) bool {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	writeJSONBody(w, v)
+}
+
+func writeJSONBody(w http.ResponseWriter, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)

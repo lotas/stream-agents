@@ -30,6 +30,7 @@ type derivedSession struct {
 	times      int
 	messages   int
 	cost       float64
+	tokens     int
 	cutoff     time.Duration
 	multiplier float64
 	sess       Session
@@ -94,13 +95,13 @@ func (idx *Index) derive(into map[string]derivedSession, sess Session) Session {
 	key := sess.Agent + "\x00" + sess.ID
 	m := idx.CostMultiplier(sess.Agent)
 	if d, ok := idx.derived[key]; ok && d.modified.Equal(sess.Modified) && d.times == len(sess.ActivityTimes) &&
-		d.messages == sess.MessageCount && d.cost == sess.Cost && d.cutoff == idx.IdleCutoff && d.multiplier == m {
+		d.messages == sess.MessageCount && d.cost == sess.Cost && d.tokens == sessionTokens(sess) && d.cutoff == idx.IdleCutoff && d.multiplier == m {
 		into[key] = d
 		return d.sess
 	}
 	d := derivedSession{
 		modified: sess.Modified, times: len(sess.ActivityTimes), messages: sess.MessageCount,
-		cost: sess.Cost, cutoff: idx.IdleCutoff, multiplier: m,
+		cost: sess.Cost, tokens: sessionTokens(sess), cutoff: idx.IdleCutoff, multiplier: m,
 	}
 	if len(sess.ActivityTimes) > 0 {
 		sess.Activity = ActivityIntervals(sess.ActivityTimes, idx.IdleCutoff)
@@ -115,6 +116,10 @@ func (idx *Index) derive(into map[string]derivedSession, sess Session) Session {
 	d.sess = sess
 	into[key] = d
 	return sess
+}
+
+func sessionTokens(s Session) int {
+	return s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens
 }
 
 // LoadSession delegates to the store matching the given agent.

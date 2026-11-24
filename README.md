@@ -107,6 +107,9 @@ spend from several machines:
 - `GET /llms.txt` (also `/llm.txt`) describes the whole HTTP API for LLM
   agents ([llmstxt.org](https://llmstxt.org) format), with example responses.
 - `GET /api/v1/health` returns `{"ok":true,"version":"…","host":"…"}`.
+- `GET /api/v1/session-costs?cwd=/abs/project&days=31` (or `?ids=claude/<id>,…`)
+  returns per-session cost estimates for sessions under a directory, with
+  subagent usage rolled into the parent session. See `/llms.txt`.
 - `GET /api/v1/usage?days=31` returns daily aggregates for the last `days`
   local calendar days, including today (default 31, capped at 400). Each day
   lists one entry per agent and model; days without usage have `"by": []`.
@@ -279,6 +282,7 @@ curl http://mac-mini:7777/api/v1/health
 curl "http://mac-mini:7777/api/v1/usage?days=7"
 curl http://mac-mini:7777/api/v1/sessions
 curl http://mac-mini:7777/api/v1/limits
+curl "http://mac-mini:7777/api/v1/session-costs?cwd=/Users/me/dev/proj&days=30"
 ```
 
 ### Running under launchd (macOS)
